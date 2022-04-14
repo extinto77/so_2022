@@ -5,48 +5,75 @@
 #include <sys/wait.h>
 #include <string.h>
 
+#define NOP 0
+#define BCOMPRESS 1
+#define BDECOMPRESS 2
+#define GCOMPRESS 3
+#define GDECOMPRESS 4
+#define ENCRYPT 5
+#define DECRYPT 6
+int config[7];
+
 #define ERROR -1
 #define OK 1
 
 //0->stdin
 //1->stdout
 
+char* concatStrings(char *s1, char *s2){
+    char *result = malloc(strlen(s1) + strlen(s2) + 1);
+    strcpy(result, s1);
+    strcat(result, s2);
+    return result;
+}
 
-int config[7];//0->nop|1->bcompress|2->bdecompress|3->gcompress|4->gdecompress|5->encrypt|6->decrypt
+char** parse(char* string, char* delimiter){//falta testar
+    char* array[1024];//limitacao de 1024 items a dar parse
+	char *ptr = strtok(string, delimiter);
+    for (int i = 0; ptr != NULL; i++){
+        char *step = malloc(strlen(ptr)+1);
+        strcpy(step, ptr);
+        array[i]=step;
+
+        ptr = strtok(NULL, delimiter);
+    }
+    return array;//warning que pode desaparecer quando sai da funcao
+}
 
 void readConfigFile(char *path){
     FILE * fp = fopen(path, "r");
     if (fp == NULL)
         perror("error reading config file");
+    else{
+        char * line = NULL;
+        size_t size = 0;
+        ssize_t read;
+        char* string;
+        int nr;
+        while ((read = getline(&line, &size, fp)) != -1) {
+            read = sscanf(line, "%s %d" , string, &nr);
+            if(read != 2)
+                perror("erro de sintaxe no ficheiro config");
 
-    char * line = NULL;
-    size_t size = 0;
-    ssize_t read;
-    char* string;
-    int nr;
-    while ((read = getline(&line, &size, fp)) != -1) {
-        read = sscanf(line, "%s %d" , string, &nr);
-        if(read != 2)
-            perror("erro de sintaxe no ficheiro config");
-
-        if (strcmp(string, "nop") == 0)
-            config[0]=nr;
-        else if (strcmp(string, "bcompress") == 0)
-            config[1]=nr;
-        else if (strcmp(string, "bdecompress") == 0)
-            config[2]=nr;
-        else if (strcmp(string, "gcompress") == 0)
-            config[3]=nr;
-        else if (strcmp(string, "gdecompress") == 0)
-            config[4]=nr;
-        else if (strcmp(string, "encrypt") == 0)
-            config[5]=nr;
-        else if (strcmp(string, "decrypt") == 0)
-            config[6]=nr;
+            if (!strcmp(string, "nop"))
+                config[NOP]=nr;
+            else if (!strcmp(string, "bcompress"))
+                config[BCOMPRESS]=nr;
+            else if (!strcmp(string, "bdecompress"))
+                config[BDECOMPRESS]=nr;
+            else if (!strcmp(string, "gcompress"))
+                config[GCOMPRESS]=nr;
+            else if (!strcmp(string, "gdecompress"))
+                config[GDECOMPRESS]=nr;
+            else if (!strcmp(string, "encrypt"))
+                config[ENCRYPT]=nr;
+            else if (!strcmp(string, "decrypt"))
+                config[DECRYPT]=nr;
+        }
+        fclose(fp);
+        if (line)
+            free(line);
     }
-    fclose(fp);
-    if (line)
-        free(line);
 }
 
 int redirecionar(char *inputPath, char *outputPath){
@@ -69,13 +96,6 @@ int redirecionar(char *inputPath, char *outputPath){
     close(output);
 
     return OK;
-}
-
-char* concatStrings(char *s1, char *s2){
-    char *result = malloc(strlen(s1) + strlen(s2) + 1);
-    strcpy(result, s1);
-    strcat(result, s2);
-    return result;
 }
 
 int aplicarTransformacoes(char** transformacoes, int nTransformscoes){//assumindo que o redirecionamento já está feito antes...
@@ -103,76 +123,43 @@ int aplicarTransformacoes(char** transformacoes, int nTransformscoes){//assumind
     }
     if(execl(concatStrings("SDStore-transf/",transformacoes[i]),transformacoes[i],NULL) == ERROR){
         perror("Erro a aplicar filtro");
-        _exit(ERROR);
+        return(ERROR);
     }
-    return OK;
-    //ver se tá certo daqui para cima e esquecer o resto 
-    
-
-
-
-
-
-    /*
-    int p[2];
-    int res = pipe(p);
-    //fds[0]->escritor de escrita
-    //fds[1]->escritor de leitura  
-    if(res==-1){
-        perror("Erro ao criar pipe.\n");
-        return NULL;
-    }
-
-    pid_t pid;
-    if((pid=fork())==0){//consumidor
-        //fechar o file descriptor de escrita
-        close(fds[1]);
-
-        int nRead;
-        //ler do pai
-        while ((nRead = read(fds[0], &buffer, MAX_SIZE))>0){
-            printf("#_: recebi a mensagem: %s\n", buffer);
-        }    
-        
-        //fechar pipe de leitura
-        close(fds[0]);
-
-        _exit(0);
-    }
-    else if(pid==-1){
-        perror("Fork not made.\n");
-        return -1;
-    }
-    else{//produtor
-        //fechar o file descriptor de leitura
-        close(fds[0]);
-
-        //sleep(5);
-
-        for (int i = 0; chache[i]!=NULL; i++){
-            //escrever para o filho
-            write(fds[1], chache[i], strlen(chache[i]));
-            sleep(1);//para não dar erro
-        }
-
-        //fechar pipe de escrita
-        close(fds[1]);
-
-        wait(&status);
-    }
-    */
+    return OK;//nunca chega aqui??
 }
 
+int verificarSintax(char** transformacoes, int nTransf){
+    int count=0;
+    for (int i = 0; i < nTransf; i++){
+        if (!strcmp(transformacoes[i], "nop"))
+            count++;
+        else if (!strcmp(transformacoes[i], "bcompress"))
+            count++;
+        else if (!strcmp(transformacoes[i], "bdecompress"))
+            count++;
+        else if (!strcmp(transformacoes[i], "gcompress"))
+            count++;
+        else if (!strcmp(transformacoes[i], "gdecompress"))
+            count++;
+        else if (!strcmp(transformacoes[i], "encrypt"))
+            count++;
+        else if (!strcmp(transformacoes[i], "decrypt"))
+            count++;
+    }
+    return count;
+}
 
 int main(int argc, char const *argv[]){
-    /*readConfigFile("config.txt");
+    /*readConfigFile("etc/config.txt");
     for(int i=0;i<7;i++)
         printf("%d-> %d\n", i, config[i]);
     */
 
 
+
+
     char* cache[]={"encrypt", "decrypt"};
-    redirecionar("pdfTest.pdf", "novoPdfTest.pdf");
+    redirecionar("test_files/pdfTest.pdf", "test_files/novoPdfTest.pdf");
     aplicarTransformacoes(cache, 2);
     return 0;
 }
