@@ -58,3 +58,5 @@ SDStore-transf/*crypt
 SDStore-transf/nop
 
 .vscode
+
+bin/*
