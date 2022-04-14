@@ -8,7 +8,7 @@ server: sdstored
 client: sdstore
 
 execs:
-		$(MAKE) -C SDStore-transf
+		$(MAKE) all -C SDStore-transf
 
 sdstored: src/sdstored.c
 		$(CC) $(CFLAGS) src/sdstored.c -o bin/sdstored
