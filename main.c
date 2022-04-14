@@ -12,7 +12,44 @@
 //1->stdout
 
 
-int redirecionar(char inputPath, char outputPath){
+int config[7];//0->nop|1->bcompress|2->bdecompress|3->gcompress|4->gdecompress|5->encrypt|6->decrypt
+
+void readConfigFile(char *path){
+    FILE * fp = fopen(path, "r");
+    if (fp == NULL)
+        perror("error reading config file");
+
+    char * line = NULL;
+    size_t size = 0;
+    ssize_t read;
+    char* string;
+    int nr;
+    while ((read = getline(&line, &size, fp)) != -1) {
+        read = sscanf(line, "%s %d" , string, &nr);
+        if(read != 2)
+            perror("erro de sintaxe no ficheiro config");
+
+        if (strcmp(string, "nop") == 0)
+            config[0]=nr;
+        else if (strcmp(string, "bcompress") == 0)
+            config[1]=nr;
+        else if (strcmp(string, "bdecompress") == 0)
+            config[2]=nr;
+        else if (strcmp(string, "gcompress") == 0)
+            config[3]=nr;
+        else if (strcmp(string, "gdecompress") == 0)
+            config[4]=nr;
+        else if (strcmp(string, "encrypt") == 0)
+            config[5]=nr;
+        else if (strcmp(string, "decrypt") == 0)
+            config[6]=nr;
+    }
+    fclose(fp);
+    if (line)
+        free(line);
+}
+
+int redirecionar(char *inputPath, char *outputPath){
     int input,output;
 
     input = open(inputPath, O_RDONLY);
@@ -22,7 +59,7 @@ int redirecionar(char inputPath, char outputPath){
     }
     dup2(input,0);
     close(input);
-    
+  
     output = open(outputPath, O_TRUNC | O_WRONLY | O_CREAT, 0666); //0644
     if( output == ERROR){
         perror("error redirecting output");
@@ -30,23 +67,30 @@ int redirecionar(char inputPath, char outputPath){
     }
     dup2(output,1);
     close(output);
-    
+
     return OK;
 }
 
-char* aplicarTransformacoes(char* transformacoes, int nTransformscoes, char* path){//assumindo que o redirecionamento já está feito antes...
+char* concatStrings(char *s1, char *s2){
+    char *result = malloc(strlen(s1) + strlen(s2) + 1);
+    strcpy(result, s1);
+    strcat(result, s2);
+    return result;
+}
+
+int aplicarTransformacoes(char** transformacoes, int nTransformscoes){//assumindo que o redirecionamento já está feito antes...
     int i, p[2];
 
     for (i=0; i < nTransformscoes-1; i++){
         int res = pipe(p);
-        pid_t filho = fork();
+        pid_t pid;
 
-        if(!filho){
+        if((pid = fork())==0){
             dup2(p[1],1);
             close(p[1]);
             close(p[0]);    
 
-            if(execl(transformacoes[i],transformacoes[i],NULL) == ERROR){
+            if(execl(concatStrings("SDStore-transf/",transformacoes[i]),transformacoes[i],NULL) == ERROR){
                 perror("Erro a aplicar filtro");
                 _exit(ERROR);
             }
@@ -57,7 +101,7 @@ char* aplicarTransformacoes(char* transformacoes, int nTransformscoes, char* pat
             close(p[1]);
         }
     }
-    if(execl(transformacoes[i],transformacoes[i],NULL) == ERROR){
+    if(execl(concatStrings("SDStore-transf/",transformacoes[i]),transformacoes[i],NULL) == ERROR){
         perror("Erro a aplicar filtro");
         _exit(ERROR);
     }
@@ -69,7 +113,7 @@ char* aplicarTransformacoes(char* transformacoes, int nTransformscoes, char* pat
 
 
 
-    
+    /*
     int p[2];
     int res = pipe(p);
     //fds[0]->escritor de escrita
@@ -116,5 +160,19 @@ char* aplicarTransformacoes(char* transformacoes, int nTransformscoes, char* pat
 
         wait(&status);
     }
-    
+    */
+}
+
+
+int main(int argc, char const *argv[]){
+    /*readConfigFile("config.txt");
+    for(int i=0;i<7;i++)
+        printf("%d-> %d\n", i, config[i]);
+    */
+
+
+    char* cache[]={"encrypt", "decrypt"};
+    redirecionar("pdfTest.pdf", "novoPdfTest.pdf");
+    aplicarTransformacoes(cache, 2);
+    return 0;
 }
