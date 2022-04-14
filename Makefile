@@ -1,23 +1,21 @@
+CC = gcc
+CFLAGS = -Wall -g
+
 all: server client execs
 
-server: bin/sdstored
+server: sdstored
 
-client: bin/sdstore
+client: sdstore
 
-!!!ERRO execs: SDStore-transf
-		fazer make da makefile que esta na pasta acima
+execs:
+		$(MAKE) -C SDStore-transf
 
-bin/sdstored: obj/sdstored.o
-		gcc -g obj/sdstored.o -o bin/sdstored
+sdstored: src/sdstored.c
+		$(CC) $(CFLAGS) src/sdstored.c -o bin/sdstored
 
-obj/sdstored.o: src/sdstored.c
-		gcc -Wall -g -c src/sdstored.c obj/sdstored.o
-
-bin/sdstore: obj/sdstore.o
-		gcc -g obj/sdstore.o -o bin/sdstore
-
-obj/sdstore.o: src/sdstore.c
-		gcc -Wall -g -c src/sdstore.c obj/sdstore.o
+sdstore: src/sdstore.c
+		$(CC) $(CFLAGS) src/sdstore.c -o bin/sdstore
 
 clean:
-		rm obj/* tmp/* bin/{sdstore,sdstored}
+		rm -f bin/*
+		$(MAKE) clean -C SDStore-transf
