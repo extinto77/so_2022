@@ -1,8 +1,11 @@
-all: server client
+all: server client execs
 
 server: bin/sdstored
 
 client: bin/sdstore
+
+!!!ERRO execs: SDStore-transf
+		fazer make da makefile que esta na pasta acima
 
 bin/sdstored: obj/sdstored.o
 		gcc -g obj/sdstored.o -o bin/sdstored
