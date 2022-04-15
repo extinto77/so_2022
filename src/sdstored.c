@@ -3,32 +3,22 @@
 //0->stdin
 //1->stdout
 
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <sys/wait.h>
-#include <string.h>
-
-#define NOP 0
-#define BCOMPRESS 1
-#define BDECOMPRESS 2
-#define GCOMPRESS 3
-#define GDECOMPRESS 4
-#define ENCRYPT 5
-#define DECRYPT 6
-
-//criar um com nomes?? torna codigo mais melhor bom??
-int config[7];//nr maximos de cada tipo de filtros que podem executar ao mesmo tempo
-int using[7];//nr de filtros de cada tipo que estao a executar no momento presente
-
-char* pendingRequests[100];//pedidos em espera
-int nrpendingRequests;
+#include "sharedFunction.h"
 
 char* transformations_folder = NULL;
 
-#define ERROR -1
-#define OK 1
+//criar um com nomes das transformacoes?? torna codigo mais melhor bom??
+int config[7];//nr maximos de cada tipo de filtros que podem executar ao mesmo tempo
+int using[7];//nr de filtros de cada tipo que estao a executar no momento presente
+
+int pendingRequestsIdx[100];//pedidos em espera
+int nrpendingRequests;
+
+int runningRequestsIdx[100];//pedidos a correr
+int nrrunningRequests;
+
+char* tasks[777];//todos os pedidos enviados para o servidor
+
 
 int readConfigFile(char *path){
     FILE * fp = fopen(path, "r");
@@ -65,53 +55,9 @@ int readConfigFile(char *path){
                 config[DECRYPT]=nr;
         }
         fclose(fp);
-        if (line)
-            free(line);
-        if (string)
-            free(string);
+        if (line) free(line);
+        if (string) free(string);
     }
-    return OK;
-}
-
-char* concatStrings(char *s1, char *s2){
-    char *result = malloc(strlen(s1) + strlen(s2) + 1);
-    strcpy(result, s1);
-    strcat(result, s2);
-    return result;
-}
-
-char** parse(char* string, char* delimiter){//falta testar
-    char** array = malloc(sizeof(char*)*1024);//limitacao de 1024 items a dar parse, alteracao conformar se funciona assim
-	char *ptr = strtok(string, delimiter);
-    for (int i = 0; ptr != NULL; i++){
-        char *step = malloc(strlen(ptr)+1);
-        strcpy(step, ptr);
-        array[i]=step;
-
-        ptr = strtok(NULL, delimiter);
-    }
-    return array;//warning que pode desaparecer quando sai da funcao
-}
-
-int redirecionar(char *inputPath, char *outputPath){
-    int input,output;
-
-    input = open(inputPath, O_RDONLY);
-    if(input == ERROR){
-        perror("error redirecting input");
-        return ERROR;
-    }
-    dup2(input,0);
-    close(input);
-  
-    output = open(outputPath, O_TRUNC | O_WRONLY | O_CREAT, 0666); //0644
-    if( output == ERROR){
-        perror("error redirecting output");
-        return ERROR;
-    }
-    dup2(output,1);
-    close(output);
-
     return OK;
 }
 
@@ -149,24 +95,43 @@ int aplicarTransformacoes(char** transformacoes, int nTransformacoes){//assumind
     return OK;//nunca chega aqui??
 }
 
-void addPending(char* request){// ver se nao vai ser preciso mais  info
-    pendingRequests[nrpendingRequests] = malloc(strlen(request)+1);
-    strcpy(pendingRequests[nrpendingRequests], request);
+// simplificar as 4 seguintes para 2?? ou nao vale a pena??
+void addPending(int id){
+    pendingRequestsIdx[nrpendingRequests] = id;
+    nrpendingRequests++;
+}
+
+void addRunning(int id){
+    runningRequestsIdx[nrrunningRequests] = id;
     nrpendingRequests++;
 }
 
 void removePending(int index){
     nrpendingRequests--;
-    free(pendingRequests[index]);
     for (int i = index; i < nrpendingRequests; i++){
-        pendingRequests[i] = pendingRequests[i+1];
+        pendingRequestsIdx[i] = pendingRequestsIdx[i+1];
     }
+    pendingRequestsIdx[nrpendingRequests]=-1;
+}
+
+void removeRunning(int index){
+    nrrunningRequests--;
+    for (int i = index; i < nrrunningRequests; i++){
+        runningRequestsIdx[i] = runningRequestsIdx[i+1];
+    }
+    runningRequestsIdx[nrrunningRequests]=-1;
 }
 
 void showSatus(int fifo){//ver melhor o input
     char* buf = malloc(1024);
 
-    //escrever mais alguma info antes??
+    for(int i=0;i<nrrunningRequests;i++){
+        int idx = runningRequestsIdx[i];
+        sprintf(buf,"task #%d: %s\n", idx, tasks[idx]);//imprime as que estao a correr no momento
+        write(fifo, buf, strlen(buf));
+    }
+
+    // perguntar stor se tambem imprimimos os que estão pending
 
     write(fifo, "transf nop: ", 13);
     sprintf(buf,"%d/%d (running/max)\n",using[NOP],config[NOP]);
@@ -195,6 +160,9 @@ void showSatus(int fifo){//ver melhor o input
     write(fifo, "transf decrypt: ", 17);
     sprintf(buf,"%d/%d (running/max)\n",using[DECRYPT],config[DECRYPT]);
     write(fifo, buf, strlen(buf));
+
+    if(buf)
+        free(buf);
 }
 
 int goPendingOrNot(char** transformacoes, int nTransformacoes){
@@ -230,6 +198,7 @@ int goPendingOrNot(char** transformacoes, int nTransformacoes){
 
 
 int main(int argc, char const *argv[]){
+    // validating arguments and configuring server settings
     if(argc!=3){
         perror("invalid arguments to run the server");
         return ERROR;
@@ -239,20 +208,27 @@ int main(int argc, char const *argv[]){
         return ERROR;
     }
     strcpy(transformations_folder, (char*)argv[2]);
+
+    // inicializations
     nrpendingRequests=0;
+    nrrunningRequests=0;
     for (int i = 0; i < 7; i++){
         using[i]=0;
     }
     for (int i = 0; i < 100; i++){
-        pendingRequests[i] = NULL;
+        pendingRequestsIdx[i] = -1;
+        runningRequestsIdx[i] = -1;
+    }
+    for (int i = 0; i < 777; i++){
+        tasks[i]=NULL;
     }
     
     
+    
 
 
 
-
-
-    /* code */
+    //fazer sempre no fim
+    if(transformations_folder) free(transformations_folder);
     return 0;
 }
