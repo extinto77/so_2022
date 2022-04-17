@@ -18,7 +18,7 @@ int runningRequestsIdx[100];//pedidos a correr
 int nrrunningRequests;
 
 char* tasks[777];//todos os pedidos enviados para o servidor
-
+//int tasksNr = nrpendingRequests + nrrunningRequests;
 
 int readConfigFile(char *path){
     FILE * fp = fopen(path, "r");
@@ -163,8 +163,8 @@ int main(int argc, char const *argv[]){
         perror("invalid arguments to run the server");
         return ERROR;
     }
-    int res = readConfigFile((char*)argv[1]);
-    if(res == ERROR){
+    int res;
+    if((res = readConfigFile((char*)argv[1])) == ERROR){
         return ERROR;
     }
     strcpy(transformations_folder, (char*)argv[2]);
@@ -184,18 +184,14 @@ int main(int argc, char const *argv[]){
     }
     
     // -------------- creating fifo's -------------- 
-
-    res = mkfifo("tmp/fifoFiles",0622); // rw--w--w-
-    if(res == ERROR){
+    if((res = mkfifo("tmp/fifoWrite",0622)) == ERROR){// rw--w--w-
         perror("error creating the fifo files(write)");
         return ERROR;
-    }
-    res = mkfifo("tmp/fifoStatus",0644); // rw-r--r--
-    if(res == ERROR){
+    } 
+    if((res = mkfifo("tmp/fifoRead",0644)) == ERROR){// rw-r--r--
         perror("error creating the fifo status(read)");
         return ERROR;
     }
-
     printf("Ready to accept client requests\n");
     // -------------- handle a cliente -------------- 
     

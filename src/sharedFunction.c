@@ -30,7 +30,7 @@ int redirecionar(char *inputPath, char *outputPath){
         perror("error redirecting input");
         return ERROR;
     }
-    dup2(input,0);
+    dup2(input,STDIN_FILENO);
     close(input);
   
     output = open(outputPath, O_TRUNC | O_WRONLY | O_CREAT, 0666); //0644
@@ -38,7 +38,7 @@ int redirecionar(char *inputPath, char *outputPath){
         perror("error redirecting output");
         return ERROR;
     }
-    dup2(output,1);
+    dup2(output,STDOUT_FILENO);
     close(output);
 
     return OK;
