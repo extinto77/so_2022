@@ -8,8 +8,8 @@
 char* transformations_folder = NULL;
 
 //criar um com nomes das transformacoes?? torna codigo mais melhor bom??
-int config[7];//nr maximos de cada tipo de filtros que podem executar ao mesmo tempo
-int using[7];//nr de filtros de cada tipo que estao a executar no momento presente
+int config[TRANS_NR];//nr maximos de cada tipo de filtros que podem executar ao mesmo tempo
+int using[TRANS_NR];//nr de filtros de cada tipo que estao a executar no momento presente
 
 int pendingRequestsIdx[100];//pedidos em espera
 int nrpendingRequests;
@@ -39,20 +39,12 @@ int readConfigFile(char *path){
                 return ERROR;
             }
 
-            if (!strcmp(string, "nop"))
-                config[NOP]=nr;
-            else if (!strcmp(string, "bcompress"))
-                config[BCOMPRESS]=nr;
-            else if (!strcmp(string, "bdecompress"))
-                config[BDECOMPRESS]=nr;
-            else if (!strcmp(string, "gcompress"))
-                config[GCOMPRESS]=nr;
-            else if (!strcmp(string, "gdecompress"))
-                config[GDECOMPRESS]=nr;
-            else if (!strcmp(string, "encrypt"))
-                config[ENCRYPT]=nr;
-            else if (!strcmp(string, "decrypt"))
-                config[DECRYPT]=nr;
+            for (int i = 0; i < TRANS_NR; i++){
+                if (!strcmp(string, transformacoesNome[i])){
+                    config[i]=nr;
+                    break;
+                }
+            }
         }
         fclose(fp);
         if (line) free(line);
@@ -95,7 +87,6 @@ int aplicarTransformacoes(char** transformacoes, int nTransformacoes){//assumind
     return OK;//nunca chega aqui??
 }
 
-// simplificar as 4 seguintes para 2?? ou nao vale a pena??
 void addPending(int id){
     pendingRequestsIdx[nrpendingRequests] = id;
     nrpendingRequests++;
@@ -133,58 +124,27 @@ void showSatus(int fifo){//ver melhor o input
 
     // perguntar stor se tambem imprimimos os que estão pending
 
-    write(fifo, "transf nop: ", 13);
-    sprintf(buf,"%d/%d (running/max)\n",using[NOP],config[NOP]);
-    write(fifo, buf, strlen(buf));
-
-    write(fifo, "transf bcompress: ", 19);
-    sprintf(buf,"%d/%d (running/max)\n",using[BCOMPRESS],config[BCOMPRESS]);
-    write(fifo, buf, strlen(buf));
-
-    write(fifo, "transf bdecompress: ", 21);
-    sprintf(buf,"%d/%d (running/max)\n",using[BDECOMPRESS],config[BDECOMPRESS]);
-    write(fifo, buf, strlen(buf));
-
-    write(fifo, "transf gcompress: ", 19);
-    sprintf(buf,"%d/%d (running/max)\n",using[GCOMPRESS],config[GCOMPRESS]);
-    write(fifo, buf, strlen(buf));
-
-    write(fifo, "transf gdecompress: ", 21);
-    sprintf(buf,"%d/%d (running/max)\n",using[GDECOMPRESS],config[GDECOMPRESS]);
-    write(fifo, buf, strlen(buf));
-
-    write(fifo, "transf encrypt: ", 17);
-    sprintf(buf,"%d/%d (running/max)\n",using[ENCRYPT],config[ENCRYPT]);
-    write(fifo, buf, strlen(buf));
-
-    write(fifo, "transf decrypt: ", 17);
-    sprintf(buf,"%d/%d (running/max)\n",using[DECRYPT],config[DECRYPT]);
-    write(fifo, buf, strlen(buf));
-
+    for(int i=0;i<TRANS_NR;i++){
+        write(fifo, "transf ",8);
+        sprintf(buf,"%s: %d/%d (running/max)\n", transformacoesNome[i], using[i], config[i]);//estado de ocupacao de cada uma das transformacoes
+        write(fifo, buf, strlen(buf));
+    }
     if(buf)
         free(buf);
 }
 
 int goPendingOrNot(char** transformacoes, int nTransformacoes){
-    int after[7];
-    for (int i = 0; i < 7; i++){
+    int after[TRANS_NR];
+    for (int i = 0; i < TRANS_NR; i++){
         using[i] = after[i];
     }
     for (int i = 0; i < nTransformacoes; i++){
-        if (!strcmp(transformacoes[i], "nop"))
-            after[NOP] += 1;
-        else if (!strcmp(transformacoes[i], "bcompress"))
-            after[BCOMPRESS] += 1;
-        else if (!strcmp(transformacoes[i], "bdecompress"))
-            after[BDECOMPRESS] += 1;
-        else if (!strcmp(transformacoes[i], "gcompress"))
-            after[GCOMPRESS] += 1;
-        else if (!strcmp(transformacoes[i], "gdecompress"))
-            after[GDECOMPRESS] += 1;
-        else if (!strcmp(transformacoes[i], "encrypt"))
-            after[ENCRYPT] += 1;
-        else if (!strcmp(transformacoes[i], "decrypt"))
-            after[DECRYPT] += 1;
+        for(int j=0;j<TRANS_NR;j++){
+            if(!strcmp(transformacoes[i], transformacoesNome[j])){
+                after[j] += 1;
+                break;
+            }
+        }
     }
     int exceeded = 0;
     for (int i = 0; i < 7; i++){
@@ -198,7 +158,7 @@ int goPendingOrNot(char** transformacoes, int nTransformacoes){
 
 
 int main(int argc, char const *argv[]){
-    // validating arguments and configuring server settings
+    // -------------- validating arguments and configuring server settings -------------- 
     if(argc!=3){
         perror("invalid arguments to run the server");
         return ERROR;
@@ -209,7 +169,7 @@ int main(int argc, char const *argv[]){
     }
     strcpy(transformations_folder, (char*)argv[2]);
 
-    // inicializations
+    // -------------- inicializations -------------- 
     nrpendingRequests=0;
     nrrunningRequests=0;
     for (int i = 0; i < 7; i++){
@@ -223,12 +183,29 @@ int main(int argc, char const *argv[]){
         tasks[i]=NULL;
     }
     
+    // -------------- creating fifo's -------------- 
+
+    res = mkfifo("tmp/fifoFiles",0622); // rw--w--w-
+    if(res == ERROR){
+        perror("error creating the fifo files(write)");
+        return ERROR;
+    }
+    res = mkfifo("tmp/fifoStatus",0644); // rw-r--r--
+    if(res == ERROR){
+        perror("error creating the fifo status(read)");
+        return ERROR;
+    }
+
+    printf("Ready to accept client requests\n");
+    // -------------- handle a cliente -------------- 
     
     
 
 
 
-    //fazer sempre no fim
+    // -------------- fazer sempre no fim -------------- 
+    //existe o finally??
+
     if(transformations_folder) free(transformations_folder);
     return 0;
 }

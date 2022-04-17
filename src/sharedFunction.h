@@ -19,6 +19,19 @@
 #define ENCRYPT 5
 #define DECRYPT 6
 
+char* transformacoesNome[]={
+    "nop",
+    "bcompress",
+    "bdecompress",
+    "gcompress",
+    "gdecompress",
+    "encrypt",
+    "decrypt",
+    NULL
+};
+
+#define TRANS_NR 7
+
 
 char** parse(char* string, char* delimiter);
 
