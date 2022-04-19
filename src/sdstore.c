@@ -30,7 +30,7 @@ int main(int argc, char const *argv[]){
         }
         char* buffer = malloc(1024);//make it non static
         sscanf(buffer, "%d status\n", pid);//pid deste processo antes do comando
-        write(fd, buffer, strlen(buffer));//meter o \n ??????
+        write(fd, buffer, strlen(buffer));
         
         if ((fd=open("tmp/fifoRead", O_RDONLY))==ERROR){
             perror("error opening fifoRead");

@@ -97,6 +97,14 @@ void addRunning(int id){
     nrpendingRequests++;
 }
 
+int addTask(char* str){
+    int position = nrpendingRequests+nrrunningRequests;
+    char* buf=malloc(1024);
+    strcpy(buf, str);
+    tasks[position] = buf;
+    return position;
+}
+
 void removePending(int index){
     nrpendingRequests--;
     for (int i = index; i < nrpendingRequests; i++){
@@ -195,6 +203,50 @@ int main(int argc, char const *argv[]){
     printf("Ready to accept client requests\n");
     // -------------- handle a cliente -------------- 
     
+    int fifo, n;
+    char* buf = malloc(1024);
+    char* single_Request = malloc(1024);
+    while (1){//manter o fifo sempre a espera de mais pedidos
+        if ((fifo = open("tmp/fifoWrite",O_RDONLY,0622)) == -1){
+            perror("Erro a abrir FIFO");
+             return -1;
+        }
+        while((n = read(fifo,buf,1024)) > 0){//ler do cliente
+            while(buf && strcmp(buf,"")){//tratar do varios pedidos que ja estão no buffer
+                single_Request = strsep(&buf,"\n"); 
+                char** palavras = parse(single_Request, " ");
+                int nrPals;
+                int pid = atoi(palavras[0]);//para sinais
+                for (nrPals = 0; palavras[nrPals]!=NULL; nrPals++)
+                    ;
+
+                if(nrPals==2){//recebe pedido de status (com pid antes)
+                    // ja que temos o pid podemos usar sinais??
+
+                    if ((fifo = open("tmp/fifoStatus",O_WRONLY,0622)) == -1){
+                        perror("Erro a abrir FIFO");
+                        return -1;
+                    }
+                    showSatus(fifo);// rever, acho que está mal
+                }
+                else{
+                    int position = addTask(single_Request);
+                    if( goPendingOrNot(&(palavras[1]), nrPals-1) ){//passar o pid à frente, fica pendente
+                        addPending(position);
+                        //sinal programavel 1
+                    }
+                    else{
+                        addRunning(position);
+                        //sinal programavel 2
+
+                        //criar fork para executar na hora esta transformacao
+                    }
+
+                }
+
+            }
+        }
+    }
     
 
 

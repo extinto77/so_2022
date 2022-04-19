@@ -4,13 +4,15 @@
 char** parse(char* string, char* delimiter){//falta testar
     char** array = malloc(sizeof(char*)*1024);//limitacao de 1024 items a dar parse, alteracao conformar se funciona assim
 	char *ptr = strtok(string, delimiter);
-    for (int i = 0; ptr != NULL; i++){
+    int i;
+    for (i = 0; ptr != NULL; i++){
         char *step = malloc(strlen(ptr)+1);
         strcpy(step, ptr);
         array[i]=step;
 
         ptr = strtok(NULL, delimiter);
     }
+    array[i]=NULL;
     return array;//warning que pode desaparecer quando sai da funcao
 }
 
