@@ -5,7 +5,19 @@
 
 #include "sharedFunction.h"
 
-char* transformations_folder = NULL;
+
+char* transformacoesNome[]={
+    "nop",
+    "bcompress",
+    "bdecompress",
+    "gcompress",
+    "gdecompress",
+    "encrypt",
+    "decrypt",
+    NULL
+};
+
+char* transformations_folder;
 
 //criar um com nomes das transformacoes?? torna codigo mais melhor bom??
 int config[TRANS_NR];//nr maximos de cada tipo de filtros que podem executar ao mesmo tempo
@@ -21,6 +33,7 @@ char* tasks[777];//todos os pedidos enviados para o servidor
 //int tasksNr = nrpendingRequests + nrrunningRequests;
 
 int readConfigFile(char *path){
+    //printf("%s\n",path);
     FILE * fp = fopen(path, "r");
     if (fp == NULL){
         perror("error reading config file");
@@ -87,21 +100,21 @@ int aplicarTransformacoes(char** transformacoes, int nTransformacoes){//assumind
     return OK;//nunca chega aqui??
 }
 
-void addPending(int id){
+int addPending(int id){
     pendingRequestsIdx[nrpendingRequests] = id;
     nrpendingRequests++;
+    return nrpendingRequests-1;
 }
 
-void addRunning(int id){
+int addRunning(int id){
     runningRequestsIdx[nrrunningRequests] = id;
     nrpendingRequests++;
+    return nrrunningRequests-1;
 }
 
 int addTask(char* str){
     int position = nrpendingRequests+nrrunningRequests;
-    char* buf=malloc(1024);
-    strcpy(buf, str);
-    tasks[position] = buf;
+    tasks[position] = str;
     return position;
 }
 
@@ -123,15 +136,24 @@ void removeRunning(int index){
 
 void showSatus(int fifo){//ver melhor o input
     char* buf = malloc(1024);
-
+    buf="---RUNING REQUESTS---";
+    write(fifo, buf, strlen(buf));
     for(int i=0;i<nrrunningRequests;i++){
         int idx = runningRequestsIdx[i];
-        sprintf(buf,"task #%d: %s\n", idx, tasks[idx]);//imprime as que estao a correr no momento
+        sprintf(buf,"task #%d: (pid)%s\n", idx, tasks[idx]);//imprime as que estao a correr no momento
         write(fifo, buf, strlen(buf));
     }
 
-    // perguntar stor se tambem imprimimos os que estão pending
+    buf="\n---PENDING REQUESTS---";
+    write(fifo, buf, strlen(buf));
+    for(int i=0;i<nrpendingRequests;i++){
+        int idx = pendingRequestsIdx[i];
+        sprintf(buf,"pending #%d: (pid)%s\n", idx, tasks[idx]);//imprime as que estao a correr no momento
+        write(fifo, buf, strlen(buf));
+    }
 
+    buf="\n---SERVER CONFIGURATIONS---";
+    write(fifo, buf, strlen(buf));
     for(int i=0;i<TRANS_NR;i++){
         write(fifo, "transf ",8);
         sprintf(buf,"%s: %d/%d (running/max)\n", transformacoesNome[i], using[i], config[i]);//estado de ocupacao de cada uma das transformacoes
@@ -139,6 +161,21 @@ void showSatus(int fifo){//ver melhor o input
     }
     if(buf)
         free(buf);
+}
+
+void showPendent(int fifo){//ver melhor o input
+    char* str = "pendent";
+    write(fifo, str, strlen(str));
+}
+
+void showRunning(int fifo){//ver melhor o input
+    char* str = "running";
+    write(fifo, str, strlen(str));
+}
+
+void showConclued(int fifo){//ver melhor o input
+    char* str = "pendent";
+    write(fifo, str, strlen(str));
 }
 
 int goPendingOrNot(char** transformacoes, int nTransformacoes){
@@ -166,6 +203,8 @@ int goPendingOrNot(char** transformacoes, int nTransformacoes){
 
 
 int main(int argc, char const *argv[]){
+    setbuf(stdout, NULL);
+
     // -------------- validating arguments and configuring server settings -------------- 
     if(argc!=3){
         perror("invalid arguments to run the server");
@@ -175,6 +214,7 @@ int main(int argc, char const *argv[]){
     if((res = readConfigFile((char*)argv[1])) == ERROR){
         return ERROR;
     }
+    transformations_folder=malloc(1024);
     strcpy(transformations_folder, (char*)argv[2]);
 
     // -------------- inicializations -------------- 
@@ -190,61 +230,90 @@ int main(int argc, char const *argv[]){
     for (int i = 0; i < 777; i++){
         tasks[i]=NULL;
     }
+
+    remove("tmp/*");
     
     // -------------- creating fifo's -------------- 
     if((res = mkfifo("tmp/fifoWrite",0622)) == ERROR){// rw--w--w-
-        perror("error creating the fifo files(write)");
+        perror("error creating the fifo Write(client))");
         return ERROR;
     } 
     if((res = mkfifo("tmp/fifoRead",0644)) == ERROR){// rw-r--r--
-        perror("error creating the fifo status(read)");
+        perror("error creating the fifo Read(client))");
         return ERROR;
     }
-    printf("Ready to accept client requests\n");
+    char* ready = "Ready to accept client requests\n";
+    write(STDOUT_FILENO, ready, strlen(ready));
     // -------------- handle a cliente -------------- 
     
     int fifo, n;
     char* buf = malloc(1024);
     char* single_Request = malloc(1024);
+
+    pid_t pidServidor = getpid();
     while (1){//manter o fifo sempre a espera de mais pedidos
         if ((fifo = open("tmp/fifoWrite",O_RDONLY,0622)) == -1){
             perror("Erro a abrir FIFO");
-             return -1;
+            return -1;
         }
+        printf("vou começar while a ler do fifo %d\n", fifo);
         while((n = read(fifo,buf,1024)) > 0){//ler do cliente
+            printf("li alguma coisa");
             while(buf && strcmp(buf,"")){//tratar do varios pedidos que ja estão no buffer
-                single_Request = strsep(&buf,"\n"); 
+                // ver aquilo que o stor disse sobre o buff_ (aual azula) não escrever logo no file descritor
+                printf("recebi pedido\n");
+                
+                char* copy = malloc(1024);
+                single_Request = strsep(&buf,"\n");
+                strcpy(copy, single_Request); 
                 char** palavras = parse(single_Request, " ");
                 int nrPals;
                 int pid = atoi(palavras[0]);//para sinais
                 for (nrPals = 0; palavras[nrPals]!=NULL; nrPals++)
                     ;
 
+                char* newFifoName = malloc(1024);
+                sprintf(newFifoName, "tmp/fifoRead%s",palavras[0]);//fifo especifico para enviar mensagens para processo especifico
+                if ((fifo = open("tmp/fifoRead",O_WRONLY,0622)) == -1){//em vez de usar sinais tornar o fifo único para o cliente
+                    perror("Erro a abrir FIFO");
+                    return -1;
+                }
+
                 if(nrPals==2){//recebe pedido de status (com pid antes)
                     // ja que temos o pid podemos usar sinais??
-
-                    if ((fifo = open("tmp/fifoStatus",O_WRONLY,0622)) == -1){
-                        perror("Erro a abrir FIFO");
-                        return -1;
-                    }
-                    showSatus(fifo);// rever, acho que está mal
+                    showSatus(fifo);
+                    close(fifo);// rever, acho que está mal
+                    free(newFifoName);
                 }
-                else{
+                else{//pid proc-file file-in file-out transf1...
                     int position = addTask(single_Request);
                     if( goPendingOrNot(&(palavras[1]), nrPals-1) ){//passar o pid à frente, fica pendente
-                        addPending(position);
-                        //sinal programavel 1
+                        int idx = addPending(position);
+                        //esperar pelo sinal
                     }
                     else{
-                        addRunning(position);
-                        //sinal programavel 2
+                        pid_t child_pid;
+                        int status;
+                        if(!fork()){// para não deixar o processo que corre o servidor à espera fazer double fork 
+                            if ((child_pid=!fork())==0){
+                                int idx = addRunning(position);
 
-                        //criar fork para executar na hora esta transformacao
+                                redirecionar(palavras[2], palavras[3]);
+                                aplicarTransformacoes(&(palavras[4]), nrPals-4);
+                                removeRunning(idx);
+                            }
+                            else{
+                                waitpid(pid, &status, 0);
+
+                                kill(pidServidor, SIGUSR1);//=???
+                                //enviar sinal para acordar pendentes??
+                            }
+                        }
                     }
-
                 }
-
+                free(newFifoName);
             }
+            close(fifo);// rever, acho que está mal
         }
     }
     

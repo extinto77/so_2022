@@ -19,3 +19,10 @@ sdstore: src/sdstore.c
 clean:
 		rm -f bin/*
 		$(MAKE) clean -C SDStore-transf
+
+
+runS:
+		./bin/sdstored etc/config.txt SDStore.transf/
+
+runC:
+		./bin/sdstore

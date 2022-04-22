@@ -4,6 +4,8 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #ifndef __SHARED_F__
 #define __SHARED_F__
@@ -19,16 +21,6 @@
 #define ENCRYPT 5
 #define DECRYPT 6
 
-char* transformacoesNome[]={
-    "nop",
-    "bcompress",
-    "bdecompress",
-    "gcompress",
-    "gdecompress",
-    "encrypt",
-    "decrypt",
-    NULL
-};
 
 #define TRANS_NR 7
 

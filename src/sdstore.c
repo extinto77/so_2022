@@ -2,7 +2,19 @@
 
 #include "sharedFunction.h"
 
-int verificarSintax(char** transformacoes, int nTransf){//antes de enviar para server passar por isto
+
+char* transformacoesNome[]={
+    "nop",
+    "bcompress",
+    "bdecompress",
+    "gcompress",
+    "gdecompress",
+    "encrypt",
+    "decrypt",
+    NULL
+};
+
+int verificarSintax(const char** transformacoes, int nTransf){//antes de enviar para server passar por isto
     int count=0;
     for (int i = 0; i < nTransf; i++){
         for (int j = 0; j < TRANS_NR; j++){
@@ -16,6 +28,8 @@ int verificarSintax(char** transformacoes, int nTransf){//antes de enviar para s
 }
 
 int main(int argc, char const *argv[]){
+    setbuf(stdout, NULL);
+    printf("vou comecar");
     int fd, n;
     int pid=getpid();
 
@@ -29,14 +43,14 @@ int main(int argc, char const *argv[]){
             return ERROR;
         }
         char* buffer = malloc(1024);//make it non static
-        sscanf(buffer, "%d status\n", pid);//pid deste processo antes do comando
+        sprintf(buffer, "%d status\n", pid);//pid deste processo antes do comando
+        printf("\nmemsnagem:%s\n", buffer);
         write(fd, buffer, strlen(buffer));
-        
-        if ((fd=open("tmp/fifoRead", O_RDONLY))==ERROR){
+        printf("enviei para o fifo %d a msg:%s\n", fd, buffer);
+        if ((fd=open("tmp/fifoRead", O_RDONLY))==ERROR){//adicionar o pid
             perror("error opening fifoRead");
             return ERROR;
         }
-
         while((n = read(fd,buffer,1024))>0){      
             write(STDOUT_FILENO,buffer,n);
         }
@@ -59,19 +73,21 @@ int main(int argc, char const *argv[]){
             char* buffer = malloc(1024);
             buffer="";
             for (int i = 1; i < argc; i++){
-                buffer = concatStrings(buffer, argv[i]);
+                buffer = concatStrings(buffer, (char*)argv[i]);
             }
 
-            sscanf(buffer, "%d %s\n", pid, buffer);//pid deste processo antes do comando
+            sprintf(buffer, "%d %s\n", pid, buffer);//pid deste processo antes do comando
             
             write(fd, buffer, strlen(buffer));
             
-            if ((fd=open("tmp/fifoRead", O_RDONLY))==ERROR){
+            char* newFifoName = malloc(1024);
+            sprintf(newFifoName, "tmp/fifoRead%d", pid);//fifo especifico para receber mensagens só neste precesso
+            if ((fd=open(newFifoName, O_RDONLY))==ERROR){
                 perror("error opening fifoRead");
                 return ERROR;
             }
 
-            //wait pelas respostas ??
+            //wait pelas respostas ??, fazer ainda
 
         }
         else{
