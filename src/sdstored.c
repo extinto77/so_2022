@@ -32,6 +32,21 @@ int nrrunningRequests;
 char* tasks[777];//todos os pedidos enviados para o servidor
 //int tasksNr = nrpendingRequests + nrrunningRequests;
 
+
+
+void deleteFolderContent(char* dir){
+    DIR *theFolder = opendir(dir);
+    struct dirent *next_file;
+    char* filepath = malloc(1024);
+
+    while ( (next_file = readdir(theFolder)) != NULL ){
+        sprintf(filepath, "%s/%s", dir, next_file->d_name);
+        remove(filepath);
+    }
+    free(filepath);
+    closedir(theFolder);
+}
+
 int readConfigFile(char *path){
     //printf("%s\n",path);
     FILE * fp = fopen(path, "r");
@@ -55,6 +70,7 @@ int readConfigFile(char *path){
             for (int i = 0; i < TRANS_NR; i++){
                 if (!strcmp(string, transformacoesNome[i])){
                     config[i]=nr;
+                    //printf("--%s->%d\n", transformacoesNome[i], nr);
                     break;
                 }
             }
@@ -136,7 +152,7 @@ void removeRunning(int index){
 
 void showSatus(int fifo){//ver melhor o input
     char* buf = malloc(1024);
-    buf="---RUNING REQUESTS---";
+    strcpy(buf, "---RUNING REQUESTS---\n");
     write(fifo, buf, strlen(buf));
     for(int i=0;i<nrrunningRequests;i++){
         int idx = runningRequestsIdx[i];
@@ -144,7 +160,7 @@ void showSatus(int fifo){//ver melhor o input
         write(fifo, buf, strlen(buf));
     }
 
-    buf="\n---PENDING REQUESTS---";
+    strcpy(buf, "\n---PENDING REQUESTS---\n");
     write(fifo, buf, strlen(buf));
     for(int i=0;i<nrpendingRequests;i++){
         int idx = pendingRequestsIdx[i];
@@ -152,10 +168,11 @@ void showSatus(int fifo){//ver melhor o input
         write(fifo, buf, strlen(buf));
     }
 
-    buf="\n---SERVER CONFIGURATIONS---";
+    strcpy(buf, "\n---SERVER CONFIGURATIONS---\n");
     write(fifo, buf, strlen(buf));
     for(int i=0;i<TRANS_NR;i++){
-        write(fifo, "transf ",8);
+        char* trans = "transf ";
+        write(fifo, trans, strlen(trans));
         sprintf(buf,"%s: %d/%d (running/max)\n", transformacoesNome[i], using[i], config[i]);//estado de ocupacao de cada uma das transformacoes
         write(fifo, buf, strlen(buf));
     }
@@ -231,13 +248,13 @@ int main(int argc, char const *argv[]){
         tasks[i]=NULL;
     }
 
-    remove("tmp/*");
+    deleteFolderContent("tmp");
     
     // -------------- creating fifo's -------------- 
     if((res = mkfifo("tmp/fifoWrite",0622)) == ERROR){// rw--w--w-
         perror("error creating the fifo Write(client))");
         return ERROR;
-    } 
+    }
     if((res = mkfifo("tmp/fifoRead",0644)) == ERROR){// rw-r--r--
         perror("error creating the fifo Read(client))");
         return ERROR;
@@ -281,9 +298,9 @@ int main(int argc, char const *argv[]){
 
                 if(nrPals==2){//recebe pedido de status (com pid antes)
                     // ja que temos o pid podemos usar sinais??
+                    printf("2palavras\n");
                     showSatus(fifo);
                     close(fifo);// rever, acho que está mal
-                    free(newFifoName);
                 }
                 else{//pid proc-file file-in file-out transf1...
                     int position = addTask(single_Request);

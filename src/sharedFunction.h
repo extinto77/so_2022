@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <dirent.h>
 
 #ifndef __SHARED_F__
 #define __SHARED_F__

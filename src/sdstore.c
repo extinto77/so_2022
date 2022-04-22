@@ -44,18 +44,18 @@ int main(int argc, char const *argv[]){
         }
         char* buffer = malloc(1024);//make it non static
         sprintf(buffer, "%d status\n", pid);//pid deste processo antes do comando
-        printf("\nmemsnagem:%s\n", buffer);
         write(fd, buffer, strlen(buffer));
         printf("enviei para o fifo %d a msg:%s\n", fd, buffer);
         if ((fd=open("tmp/fifoRead", O_RDONLY))==ERROR){//adicionar o pid
             perror("error opening fifoRead");
             return ERROR;
         }
-        while((n = read(fd,buffer,1024))>0){      
+        printf("--ola--\n");
+        while((n = read(fd,buffer,1024)) > 0){
             write(STDOUT_FILENO,buffer,n);
         }
 
-        //close(fd);
+        close(fd);
 
         free(buffer);
         
@@ -71,12 +71,15 @@ int main(int argc, char const *argv[]){
                 return ERROR;
             }
             char* buffer = malloc(1024);
-            buffer="";
+            strcpy(buffer, "");
             for (int i = 1; i < argc; i++){
-                buffer = concatStrings(buffer, (char*)argv[i]);
+                strcpy(buffer, concatStrings(buffer, (char*)argv[i]));
             }
-
-            sprintf(buffer, "%d %s\n", pid, buffer);//pid deste processo antes do comando
+            
+            char* pidStr = malloc(1024);
+            sprintf(pidStr, "%d ", pid);
+            concatStrings(pidStr, buffer); //pid deste processo antes do comando
+            free(pidStr);
             
             write(fd, buffer, strlen(buffer));
             
@@ -87,8 +90,12 @@ int main(int argc, char const *argv[]){
                 return ERROR;
             }
 
+
+
             //wait pelas respostas ??, fazer ainda
 
+            free(buffer);
+            free(newFifoName);
         }
         else{
             perror("syntax error in the transformations");
