@@ -22,8 +22,12 @@
 #define ENCRYPT 5
 #define DECRYPT 6
 
-
 #define TRANS_NR 7
+
+#define SERVICE_PENDENT "Request status: PENDENT\n"
+#define SERVICE_RUNNING "Request status: RUNNING\n"
+#define SERVICE_FINISHED "Request status: FINISHED\n"
+#define SERVICE_ABORTED "Request status: ABORTED\n"
 
 
 char** parse(char* string, char* delimiter);

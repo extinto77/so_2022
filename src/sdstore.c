@@ -27,9 +27,16 @@ int verificarSintax(const char** transformacoes, int nTransf){//antes de enviar 
     return count;
 }
 
+void handler(int s){
+    if(s==SIGTERM){
+        write(STDOUT_FILENO, SERVICE_ABORTED, strlen(SERVICE_ABORTED));
+    }
+}
+
 int main(int argc, char const *argv[]){
+    signal(SIGTERM, handler);
+
     setbuf(stdout, NULL);
-    printf("vou comecar");
     int fd, n;
     int pid=getpid();
 
@@ -90,12 +97,12 @@ int main(int argc, char const *argv[]){
                 return ERROR;
             }
 
+            while((n = read(fd,buffer,1024)) > 0){
+                write(STDOUT_FILENO,buffer,n);
+            }
 
-
-            //wait pelas respostas ??, fazer ainda
-
-            free(buffer);
-            free(newFifoName);
+            if(buffer) free(buffer);
+            if(newFifoName) free(newFifoName);
         }
         else{
             perror("syntax error in the transformations");
