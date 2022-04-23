@@ -60,3 +60,5 @@ SDStore-transf/nop
 .vscode
 
 bin/*
+
+main.c

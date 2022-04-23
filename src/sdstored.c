@@ -224,7 +224,8 @@ void handler(int s){
     if(s == SIGUSR1){
         for (int i = 0; i < nrpendingRequests; i++){
             int idxTask = pendingRequestsIdx[i];
-            char** palavras = parse(tasks[idxTask], " ");
+            char* palavras[77];
+            parse(tasks[idxTask], ' ', palavras);
             int nrPals;
             for (nrPals = 0; palavras[nrPals]!=NULL; nrPals++)
                 ;
@@ -270,7 +271,8 @@ void handler(int s){
         //1->esperar que todos os running acabem
         //2->notificar os pending que foi abortado
         while(nrpendingRequests>0){
-            int pid = atoi(strsep(tasks[pendingRequestsIdx[0]], " "));
+            int pid = atoi(strsep(&tasks[pendingRequestsIdx[0]], " "));
+            removePending(0);
             kill(pid, SIGTERM);
         }
         
@@ -315,8 +317,12 @@ int main(int argc, char const *argv[]){
     deleteFolderContent("tmp");//se existir ficheiros de fifos na pasta tmp remover todos os ficheiros
     
     // -------------- creating fifo's -------------- 
-    if((res = mkfifo("tmp/fifoWrite",0644)) == ERROR){// rw-r--r--
+    if((res = mkfifo("tmp/fifoWrite",0622)) == ERROR){// rw-w--w--
         perror("error creating the fifo Write(client))");
+        return ERROR;
+    }
+    if((res = mkfifo("tmp/fifoRead",0644)) == ERROR){// rw-r--r--
+        perror("error creating the fifo Read(client))");
         return ERROR;
     }
 
@@ -342,27 +348,39 @@ int main(int argc, char const *argv[]){
                 char* copy = malloc(1024);
                 single_Request = strsep(&buf,"\n");
                 strcpy(copy, single_Request); 
-                char** palavras = parse(single_Request, " ");
+                char* palavras[77];
+                parse(single_Request, ' ', palavras);
                 int nrPals;
                 for (nrPals = 0; palavras[nrPals]!=NULL; nrPals++)
                     ;
 
-                char* newFifoName = malloc(1024);
-                sprintf(newFifoName, "tmp/fifoRead%s",palavras[0]);//fifo especifico para enviar mensagens para processo especifico
-                if((res = mkfifo(newFifoName,0622)) == ERROR){// rw--w--w-
-                    perror("error creating the fifo Read(client))");
-                    continue;
-                }
-                if ((fifo = open(newFifoName,O_WRONLY,0622)) == -1){//em vez de usar sinais tornar o fifo único para o cliente
-                    perror("Erro a abrir FIFO");
-                    continue;
-                }
-
                 if(nrPals==2){//recebe pedido de status (com pid antes)
+                    if ((fifo = open("tmp/fifoRead",O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente
+                        perror("Erro a abrir FIFO");
+                        continue;
+                    }
+
+                    printf("2palavras");
                     showSatus(fifo);
                     close(fifo);
                 }
                 else{//pid proc-file file-in file-out transf1...
+                    char* newFifoName = malloc(1024);
+                    sprintf(newFifoName, "tmp/fifoRead%s",palavras[0]);//fifo especifico para enviar mensagens para processo especifico
+                    printf("--%s--\n", newFifoName);
+                    if((res = mkfifo(newFifoName,0644)) == ERROR){// rw--r--r-
+                        perror("error creating the fifo Read(one client))");
+                        continue;
+                    }
+                    printf("--3--\n");
+                    if ((fifo = open(newFifoName,O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente
+                        perror("Erro a abrir FIFO");
+                        continue;
+                    }
+                    printf("--4--\n");
+
+                    
+                    
                     int position = addTask(single_Request);
                     if( goPendingOrNot(&(palavras[1]), nrPals-1) ){//passar o pid à frente, fica pendente
                         addPending(position);//esperar ate que o sinal SIGSUR1 faca a sua parte 
@@ -386,8 +404,9 @@ int main(int argc, char const *argv[]){
                             }
                         }
                     }
+                    if(newFifoName) free(newFifoName);
+
                 }
-                if(newFifoName) free(newFifoName);
             }
         }
     }

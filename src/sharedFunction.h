@@ -30,7 +30,7 @@
 #define SERVICE_ABORTED "Request status: ABORTED\n"
 
 
-char** parse(char* string, char* delimiter);
+void parse(char* string, char delimiter, char**result);
 
 char* concatStrings(char *s1, char *s2);
 

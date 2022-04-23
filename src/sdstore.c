@@ -72,7 +72,7 @@ int main(int argc, char const *argv[]){
         }
     }
     else if(argc>=5 && !strcmp(argv[1], "proc-file")){// ./sdstore proc-file file-in file-out transf1...
-        if(verificarSintax(&(argv[1]), argc-1)==argc-1){
+        if(verificarSintax(&(argv[4]), argc-4)==argc-4){
             if ((fd=open("tmp/fifoWrite", O_WRONLY))==ERROR){
                 perror("error opening fifoWrite");
                 return ERROR;

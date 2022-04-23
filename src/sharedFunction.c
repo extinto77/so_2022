@@ -1,19 +1,30 @@
 #include "sharedFunction.h"
 
 
-char** parse(char* string, char* delimiter){//falta testar
-    char** array = malloc(sizeof(char*)*1024);//limitacao de 1024 items a dar parse, alteracao conformar se funciona assim
-	char *ptr = strtok(string, delimiter);
+void parse(char* string, char delimiter, char**result){//falta testar
+    /*char* strcopy=malloc(1024);
+    strcpy(strcopy, string);
+    char *ptr = strtok(strcopy, delimiter);
     int i;
     for (i = 0; ptr != NULL; i++){
-        char *step = malloc(strlen(ptr)+1);
-        strcpy(step, ptr);
-        array[i]=step;
+        sprintf(result[i], "%s", ptr);
+        printf("--%d->%s--\n\n", i, result[i]);
 
         ptr = strtok(NULL, delimiter);
     }
-    array[i]=NULL;
-    return array;//warning que pode desaparecer quando sai da funcao
+    result[i]=NULL;*/
+
+    int idx=0;
+    for (int i = 0; i < strlen(string);){
+        int j;
+        for (j = 0; string[i+j]!=delimiter && i+j<strlen(string); j++){
+            result[idx][j] = string[i+j];
+        }
+        result[idx][j] = '\0';
+        i+=j;
+        idx++;
+    }
+    
 }
 
 char* concatStrings(char *s1, char *s2){
