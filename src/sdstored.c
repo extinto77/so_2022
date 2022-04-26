@@ -249,19 +249,21 @@ void handler(int s){
                 if(!fork()){// para não deixar o processo que corre o servidor à espera fazer double fork 
                     if ((child_pid=!fork())==0){
                         int idx = addRunning(idxTask);
+                        showRunning(fifo);
 
                         redirecionar(palavras[2], palavras[3]);
                         aplicarTransformacoes(&(palavras[4]), nrPals-4);
                         removeRunning(idx);
+                        showConclued(fifo);
                     }
                     else{
                         wait(&status);
                         showConclued(fifo);
+                        close(fifo);//por causa de ter 2 abertos influencia?? o outro também 
                         kill(pidServidor, SIGUSR1);//=???
                         //enviar sinal para acordar pendentes??
                     }
                 }
-                close(fifo);//por causa de ter 2 abertos influencia?? o outro também 
             }
         }
     }
@@ -329,17 +331,18 @@ int main(int argc, char const *argv[]){
     printf("Ready to accept client requests\n");
     // -------------- handle a cliente -------------- 
     
-    int fifo, n;
+    int fifoR, fifoW, fifoU, n;
     char* buf = malloc(1024);
     char* single_Request = malloc(1024);
 
     pidServidor = getpid();
     while (1){//manter o fifo sempre a espera de mais pedidos
-        if ((fifo = open("tmp/fifoWrite",O_RDONLY,0622)) == -1){
+        if ((fifoW = open("tmp/fifoWrite",O_RDONLY,0622)) == -1){
             perror("Erro a abrir FIFO");
             return -1;
         }
-        while((n = read(fifo,buf,1024)) > 0){//ler do cliente
+
+        while((n = read(fifoW,buf,1024)) > 0){//ler do cliente
             printf("li alguma coisa");
             while(buf && strcmp(buf,"")){//tratar do varios pedidos que ja estão no buffer
                 // ver aquilo que o stor disse sobre o buff_ (aula azula) não escrever logo no file descritor
@@ -350,6 +353,10 @@ int main(int argc, char const *argv[]){
                 printf("recebido: %s\n", single_Request);
                 strcpy(copy, single_Request); 
                 char* palavras[77];
+                for (int i = 0; i < 77; i++){
+                    palavras[i]=malloc(1024);//passar também o nr de palavras?? previne malocs a mais
+                }
+                
                 printf("antes do parse\n");
                 parse(single_Request, ' ', palavras);
                 printf("depois do parse\n");
@@ -358,14 +365,13 @@ int main(int argc, char const *argv[]){
                     printf("%s\n", palavras[nrPals]);
 
                 if(nrPals==2){//recebe pedido de status (com pid antes)
-                    if ((fifo = open("tmp/fifoRead",O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente
+                    if ((fifoR = open("tmp/fifoRead",O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente
                         perror("Erro a abrir FIFO");
                         continue;
                     }
-
                     printf("2palavras");
-                    showSatus(fifo);
-                    close(fifo);
+                    showSatus(fifoR);
+                    close(fifoR);
                 }
                 else{//pid proc-file file-in file-out transf1...
                     char* newFifoName = malloc(1024);
@@ -375,28 +381,28 @@ int main(int argc, char const *argv[]){
                         perror("error creating the fifo Read(one client))");
                         continue;
                     }
-                    printf("--3--\n");
-                    if ((fifo = open(newFifoName,O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente
+                    if ((fifoU = open(newFifoName,O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente
                         perror("Erro a abrir FIFO");
                         continue;
                     }
-                    printf("--4--\n");
 
-                    
                     
                     int position = addTask(single_Request);
                     if( goPendingOrNot(&(palavras[1]), nrPals-1) ){//passar o pid à frente, fica pendente
                         addPending(position);//esperar ate que o sinal SIGSUR1 faca a sua parte 
+                        showPendent(fifoU);
                     }
                     else{
                         int status;
                         if(!fork()){// para não deixar o processo que corre o servidor à espera fazer double fork 
                             if (!fork()){
+                                showRunning(fifoU);
                                 int idx = addRunning(position);
 
                                 redirecionar(palavras[2], palavras[3]);
                                 aplicarTransformacoes(&(palavras[4]), nrPals-4);
                                 removeRunning(idx);
+                                showConclued(fifoU);
                                 _exit(OK);
                             }
                             else{
@@ -408,10 +414,11 @@ int main(int argc, char const *argv[]){
                         }
                     }
                     if(newFifoName) free(newFifoName);
-
+                    //dar free nos mallocs todos(palavras e afins)
                 }
             }
         }
+        close(fifoW);
     }
     
 

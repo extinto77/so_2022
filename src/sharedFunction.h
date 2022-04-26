@@ -29,6 +29,7 @@
 #define SERVICE_FINISHED "Request status: FINISHED\n"
 #define SERVICE_ABORTED "Request status: ABORTED\n"
 
+#define PIPE_FILE_CREATED "Podes criar o fifo unico"
 
 void parse(char* string, char delimiter, char**result);
 

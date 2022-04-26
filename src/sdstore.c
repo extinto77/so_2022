@@ -91,6 +91,7 @@ int main(int argc, char const *argv[]){
             
             char* newFifoName = malloc(1024);
             sprintf(newFifoName, "tmp/fifoRead%d", pid);//fifo especifico para receber mensagens só neste precesso
+            sleep(1);//fazer com que este sleep desapareça
             if ((fd=open(newFifoName, O_RDONLY))==ERROR){
                 perror("error opening fifoRead");
                 return ERROR;
