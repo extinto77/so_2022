@@ -102,7 +102,7 @@ int aplicarTransformacoes(char** transformacoes, int nTransformacoes){//assumind
             close(p[0]);
             //printf("mais que um filtro");
 
-            if(execl(concatStrings(transformations_folder,transformacoes[i]),transformacoes[i],NULL) == ERROR){
+            if(execl(concatStrings(concatStrings(transformations_folder, "/"),transformacoes[i]),transformacoes[i],NULL) == ERROR){
                 perror("Erro a aplicar filtro");
                 _exit(ERROR);
             }
@@ -410,7 +410,7 @@ int main(int argc, char const *argv[]){
                                 removeRunning(idx);// por causa do exec isto acontece??
                                 printf("pai: FEEEEIIIIITTTOOOOOO!!!\n");
                                 showConclued(fifoU);
-                                //if(close(fifoU)==ERROR) printf("erro a fechar fifo unico\n");//nao esta a acabar porque??
+                                close(fifoU);//==ERROR) printf("erro a fechar fifo unico\n");//nao esta a acabar porque??
                                 //else printf("fechei fifoUnico!!!\n");
                                 //kill(pidServidor, SIGUSR1);//=???
                                 //enviar sinal para acordar pendentes?? conformar se esta bem
