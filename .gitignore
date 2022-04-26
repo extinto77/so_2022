@@ -62,3 +62,6 @@ SDStore-transf/nop
 bin/*
 
 main.c
+
+.DS_Store
+
