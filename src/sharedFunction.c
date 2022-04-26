@@ -15,16 +15,16 @@ void parse(char* string, char delimiter, char**result){//falta testar
     result[i]=NULL;*/
 
     int idx=0;
-    for (int i = 0; i < strlen(string);){
+    for (int i = 0; i < strlen(string);idx++){
         int j;
-        for (j = 0; string[i+j]!=delimiter && i+j<strlen(string); j++){
+        result[idx] = malloc(1024);
+        for (j = 0; i+j<strlen(string) && string[i+j]!=delimiter; j++){
             result[idx][j] = string[i+j];
         }
         result[idx][j] = '\0';
         i+=j;
-        idx++;
     }
-    
+    result[idx]=NULL;
 }
 
 char* concatStrings(char *s1, char *s2){

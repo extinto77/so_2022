@@ -347,12 +347,15 @@ int main(int argc, char const *argv[]){
                 
                 char* copy = malloc(1024);
                 single_Request = strsep(&buf,"\n");
+                printf("recebido: %s\n", single_Request);
                 strcpy(copy, single_Request); 
                 char* palavras[77];
+                printf("antes do parse\n");
                 parse(single_Request, ' ', palavras);
+                printf("depois do parse\n");
                 int nrPals;
                 for (nrPals = 0; palavras[nrPals]!=NULL; nrPals++)
-                    ;
+                    printf("%s\n", palavras[nrPals]);
 
                 if(nrPals==2){//recebe pedido de status (com pid antes)
                     if ((fifo = open("tmp/fifoRead",O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente

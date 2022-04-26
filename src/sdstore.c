@@ -57,7 +57,6 @@ int main(int argc, char const *argv[]){
             perror("error opening fifoRead");
             return ERROR;
         }
-        printf("--ola--\n");
         while((n = read(fd,buffer,1024)) > 0){
             write(STDOUT_FILENO,buffer,n);
         }
@@ -80,12 +79,12 @@ int main(int argc, char const *argv[]){
             char* buffer = malloc(1024);
             strcpy(buffer, "");
             for (int i = 1; i < argc; i++){
-                strcpy(buffer, concatStrings(buffer, (char*)argv[i]));
+                strcpy(buffer, concatStrings(buffer, concatStrings((char*)argv[i], " ")));
             }
             
             char* pidStr = malloc(1024);
             sprintf(pidStr, "%d ", pid);
-            concatStrings(pidStr, buffer); //pid deste processo antes do comando
+            strcpy(buffer, concatStrings(pidStr, buffer)); //pid deste processo antes do comando
             free(pidStr);
             
             write(fd, buffer, strlen(buffer));
