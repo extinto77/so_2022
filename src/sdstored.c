@@ -86,6 +86,7 @@ int readConfigFile(char *path){
 
 int aplicarTransformacoes(char** transformacoes, int nTransformacoes){//assumindo que o redirecionamento já está feito antes...
     int i, p[2];
+    //printf("transNr: %d\n", nTransformacoes);
 
     for (i=0; i < nTransformacoes-1; i++){
         int res = pipe(p);
@@ -98,7 +99,8 @@ int aplicarTransformacoes(char** transformacoes, int nTransformacoes){//assumind
         if((pid = fork())==0){
             dup2(p[1],1);
             close(p[1]);
-            close(p[0]);    
+            close(p[0]);
+            //printf("mais que um filtro");
 
             if(execl(concatStrings(transformations_folder,transformacoes[i]),transformacoes[i],NULL) == ERROR){
                 perror("Erro a aplicar filtro");
@@ -111,8 +113,9 @@ int aplicarTransformacoes(char** transformacoes, int nTransformacoes){//assumind
             close(p[1]);
         }
     }
-    if(execl(concatStrings(transformations_folder,transformacoes[i]),transformacoes[i],NULL) == ERROR){
-        perror("Erro a aplicar filtro");
+    //printf("--FILTRO:%s--\n", concatStrings(concatStrings(transformations_folder, "/"),transformacoes[i]));
+    if(execl(concatStrings(concatStrings(transformations_folder, "/"),transformacoes[i]),transformacoes[i],NULL) == ERROR){
+    perror("Erro a aplicar filtro");
         return(ERROR);
     }
     return OK;//nunca chega aqui??
@@ -194,7 +197,7 @@ void showRunning(int fifo){//ver melhor o input
 
 void showConclued(int fifo){//ver melhor o input
     char* str = SERVICE_FINISHED;
-    write(fifo, str, strlen(str));
+    write(fifo, str, strlen(str)+1);
 }
 
 int goPendingOrNot(char** transformacoes, int nTransformacoes){
@@ -205,32 +208,33 @@ int goPendingOrNot(char** transformacoes, int nTransformacoes){
     for (int i = 0; i < nTransformacoes; i++){
         for(int j=0;j<TRANS_NR;j++){
             if(!strcmp(transformacoes[i], transformacoesNome[j])){
-                after[j] += 1;
+                after[j]++;
                 break;
             }
         }
     }
-    int exceeded = 0;
-    for (int i = 0; i < 7; i++){
+    for (int i = 0; i < TRANS_NR; i++){
         if(after[i]>config[i]){
-            exceeded = 1;
-            break;
+            return ERROR;
         }
     }
-    return exceeded;
+    return OK;
 }
 
+/*
 void handler(int s){
+    printf("entrou no HANDLER\n");
     if(s == SIGUSR1){
         for (int i = 0; i < nrpendingRequests; i++){
             int idxTask = pendingRequestsIdx[i];
             char* palavras[77];
+            
             parse(tasks[idxTask], ' ', palavras);
             int nrPals;
             for (nrPals = 0; palavras[nrPals]!=NULL; nrPals++)
                 ;
 
-            if( !goPendingOrNot(&(palavras[1]), nrPals-1) ){
+            if( goPendingOrNot(&(palavras[1]), nrPals-1) == ERROR){
                 removePending(i);
                 int fifo;
                 char* newFifoName = malloc(1024);
@@ -241,31 +245,28 @@ void handler(int s){
                     //avisar clienete que ficheiro sofreu erro???
                     continue;
                 }
-                showRunning(fifo);
-
-                addRunning(idxTask);
                 pid_t child_pid;
                 int status;
                 if(!fork()){// para não deixar o processo que corre o servidor à espera fazer double fork 
                     if ((child_pid=!fork())==0){
-                        int idx = addRunning(idxTask);
                         showRunning(fifo);
+                        int idx = addRunning(idxTask);
 
                         redirecionar(palavras[2], palavras[3]);
                         aplicarTransformacoes(&(palavras[4]), nrPals-4);
                         removeRunning(idx);
-                        showConclued(fifo);
                     }
                     else{
                         wait(&status);
                         showConclued(fifo);
                         close(fifo);//por causa de ter 2 abertos influencia?? o outro também 
-                        kill(pidServidor, SIGUSR1);//=???
+                        //kill(pidServidor, SIGUSR1);//=???
                         //enviar sinal para acordar pendentes??
                     }
                 }
             }
         }
+        return;
     }
     else if(s==SIGTERM){
         //acabar de forma graciosa
@@ -281,14 +282,15 @@ void handler(int s){
         //3-> nao deixar que mais processos sejam aceites(fechar fifo chega??, ja que foi aberto 2 vezes)
     }
 }
+*/
 
 
 int main(int argc, char const *argv[]){
     setbuf(stdout, NULL);
 
-    if(signal(SIGUSR1, handler) == SIG_ERR){
+    /*if(signal(SIGUSR1, handler) == SIG_ERR){
         perror("SIGUSR1 failed");
-    }
+    }*/
 
     // -------------- validating arguments and configuring server settings -------------- 
     if(argc!=3){
@@ -339,8 +341,10 @@ int main(int argc, char const *argv[]){
     while (1){//manter o fifo sempre a espera de mais pedidos
         if ((fifoW = open("tmp/fifoWrite",O_RDONLY,0622)) == -1){
             perror("Erro a abrir FIFO");
-            return -1;
+            continue;;
         }
+
+        printf("leitura em espera");
 
         while((n = read(fifoW,buf,1024)) > 0){//ler do cliente
             printf("li alguma coisa");
@@ -357,12 +361,10 @@ int main(int argc, char const *argv[]){
                     palavras[i]=malloc(1024);//passar também o nr de palavras?? previne malocs a mais
                 }
                 
-                printf("antes do parse\n");
                 parse(single_Request, ' ', palavras);
-                printf("depois do parse\n");
                 int nrPals;
                 for (nrPals = 0; palavras[nrPals]!=NULL; nrPals++)
-                    printf("%s\n", palavras[nrPals]);
+                    ;//saber o nr de palavras
 
                 if(nrPals==2){//recebe pedido de status (com pid antes)
                     if ((fifoR = open("tmp/fifoRead",O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente
@@ -388,35 +390,41 @@ int main(int argc, char const *argv[]){
 
                     
                     int position = addTask(single_Request);
-                    if( goPendingOrNot(&(palavras[1]), nrPals-1) ){//passar o pid à frente, fica pendente
+                    if( goPendingOrNot(&(palavras[1]), nrPals-1) == OK ){//passar o pid à frente, fica pendente
                         addPending(position);//esperar ate que o sinal SIGSUR1 faca a sua parte 
                         showPendent(fifoU);
                     }
                     else{
-                        int status;
                         if(!fork()){// para não deixar o processo que corre o servidor à espera fazer double fork 
+                            int idx, status;
                             if (!fork()){
                                 showRunning(fifoU);
-                                int idx = addRunning(position);
+                                idx = addRunning(position);
 
                                 redirecionar(palavras[2], palavras[3]);
                                 aplicarTransformacoes(&(palavras[4]), nrPals-4);
-                                removeRunning(idx);
-                                showConclued(fifoU);
                                 _exit(OK);
                             }
                             else{
                                 wait(&status);
-
-                                kill(pidServidor, SIGUSR1);//=???
+                                removeRunning(idx);// por causa do exec isto acontece??
+                                printf("pai: FEEEEIIIIITTTOOOOOO!!!\n");
+                                showConclued(fifoU);
+                                //if(close(fifoU)==ERROR) printf("erro a fechar fifo unico\n");//nao esta a acabar porque??
+                                //else printf("fechei fifoUnico!!!\n");
+                                //kill(pidServidor, SIGUSR1);//=???
                                 //enviar sinal para acordar pendentes?? conformar se esta bem
                             }
+                            _exit(OK);
                         }
                     }
+                    close(fifoU);//como o filho do filho tem copia do descritor pode usa-la
                     if(newFifoName) free(newFifoName);
                     //dar free nos mallocs todos(palavras e afins)
                 }
+                printf("acabei 1 pedido\n");
             }
+            printf("buffer vazio desde que li\n");
         }
         close(fifoW);
     }

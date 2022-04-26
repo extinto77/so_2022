@@ -34,7 +34,7 @@ void handler(int s){
 }
 
 int main(int argc, char const *argv[]){
-    signal(SIGTERM, handler);
+    //signal(SIGTERM, handler);
 
     setbuf(stdout, NULL);
     int fd, n;
@@ -96,11 +96,14 @@ int main(int argc, char const *argv[]){
                 perror("error opening fifoRead");
                 return ERROR;
             }
-
+            
             while((n = read(fd,buffer,1024)) > 0){
                 write(STDOUT_FILENO,buffer,n);
             }
 
+            printf("acabei de ler\n");
+            close(fd);
+            printf("fechei\n");
             if(buffer) free(buffer);
             if(newFifoName) free(newFifoName);
         }
