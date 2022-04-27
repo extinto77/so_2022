@@ -37,7 +37,7 @@ int main(int argc, char const *argv[]){
     //signal(SIGTERM, handler);
 
     setbuf(stdout, NULL);
-    int fd, n;
+    int fd, n, res;
     int pid=getpid();
 
     if(argc==1){// ./sdstore
@@ -45,7 +45,7 @@ int main(int argc, char const *argv[]){
         write(STDOUT_FILENO, info, strlen(info));
     }
     else if(argc==2 && !strcmp(argv[1],"status")){// ./sdstore status
-        if ((fd=open("tmp/fifoWrite", O_WRONLY))==ERROR){
+        if ((fd=open(WRITE_NAME, O_WRONLY))==ERROR){
             perror("error opening fifoWrite");
             return ERROR;
         }
@@ -53,7 +53,7 @@ int main(int argc, char const *argv[]){
         sprintf(buffer, "%d status\n", pid);//pid deste processo antes do comando
         write(fd, buffer, strlen(buffer));
         printf("enviei para o fifo %d a msg:%s\n", fd, buffer);
-        if ((fd=open("tmp/fifoRead", O_RDONLY))==ERROR){//adicionar o pid
+        if ((fd=open(READ_NAME, O_RDONLY))==ERROR){//adicionar o pid
             perror("error opening fifoRead");
             return ERROR;
         }
@@ -88,12 +88,16 @@ int main(int argc, char const *argv[]){
             strcpy(buffer, concatStrings(pidStr, buffer)); //pid deste processo antes do comando
             free(pidStr);
             
-            write(fd, buffer, strlen(buffer));
+            res = write(fd, buffer, strlen(buffer));
+            if(res==ERROR){
+                perror("error writing in fifoW");
+                return ERROR;
+            }
             close(fd);//nao sei se devemos fazer
             
             char* newFifoName = malloc(1024);
             sprintf(newFifoName, "tmp/fifoRead%d", pid);//fifo especifico para receber mensagens só neste precesso
-            //sleep(5);//fazer com que este sleep desapareça
+            sleep(1);//fazer com que este sleep desapareça
             if ((fd=open(newFifoName, O_RDONLY))==ERROR){
                 perror("error opening fifoRead(unico)");
                 return ERROR;
@@ -104,7 +108,7 @@ int main(int argc, char const *argv[]){
             }
             
             close(fd);
-            remove(newFifoName);
+            unlink(newFifoName);
             
             if(buffer) free(buffer);
             if(newFifoName) free(newFifoName);

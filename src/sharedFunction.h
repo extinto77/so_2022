@@ -31,6 +31,11 @@
 
 #define PIPE_FILE_CREATED "Podes criar o fifo unico"
 
+#define TEST ""
+
+#define READ_NAME "tmp/fifoRead"
+#define WRITE_NAME "tmp/fifoWrite"
+
 void parse(char* string, char delimiter, char**result);
 
 char* concatStrings(char *s1, char *s2);

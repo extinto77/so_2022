@@ -1,8 +1,5 @@
 //server
 
-//0->stdin
-//1->stdout
-
 #include "sharedFunction.h"
 
 
@@ -19,29 +16,29 @@ char* transformacoesNome[]={
 
 char* transformations_folder;
 
-//criar um com nomes das transformacoes?? torna codigo mais melhor bom??
 int config[TRANS_NR];//nr maximos de cada tipo de filtros que podem executar ao mesmo tempo
 int using[TRANS_NR];//nr de filtros de cada tipo que estao a executar no momento presente
 
 int pendingRequestsIdx[100];//pedidos em espera
-int nrpendingRequests;
+int nrpendingRequests;//numero de pedidos em espera
 
 int runningRequestsIdx[100];//pedidos a correr
-int nrrunningRequests;
+int nrrunningRequests;//numero de pedidos a correr
 
 char* tasks[777];//todos os pedidos enviados para o servidor
 //int tasksNr = nrpendingRequests + nrrunningRequests;
 
 pid_t pidServidor;
 
-void deleteFolderContent(char* dir){
+void deleteFolderContent(char* dir){//apagar o conteudo de uma pasta
     DIR *theFolder = opendir(dir);
     struct dirent *next_file;
     char* filepath = malloc(1024);
 
     while ( (next_file = readdir(theFolder)) != NULL ){
         sprintf(filepath, "%s/%s", dir, next_file->d_name);
-        remove(filepath);
+        unlink(filepath);
+        //remove(filepath);
     }
     free(filepath);
     closedir(theFolder);
@@ -185,17 +182,17 @@ void showSatus(int fifo){//ver melhor o input
         free(buf);
 }
 
-void showPendent(int fifo){//ver melhor o input
+void showPendent(int fifo){
     char* str = SERVICE_PENDENT;
     write(fifo, str, strlen(str));
 }
 
-void showRunning(int fifo){//ver melhor o input
+void showRunning(int fifo){
     char* str = SERVICE_RUNNING;
     write(fifo, str, strlen(str));
 }
 
-void showConclued(int fifo){//ver melhor o input
+void showConclued(int fifo){
     char* str = SERVICE_FINISHED;
     write(fifo, str, strlen(str)+1);
 }
@@ -284,6 +281,18 @@ void handler(int s){
 }
 */
 
+int testFifoRead(int *fd){
+    int n;
+    if ((n=write((*fd), TEST, strlen(TEST)))==ERROR){
+        perror("nao esta aberto");
+        if (((*fd) = open(READ_NAME,O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente
+            perror("Erro a abrir FIFO(read)");
+            return ERROR;
+        }
+    }
+    return OK;    
+}
+
 
 int main(int argc, char const *argv[]){
     setbuf(stdout, NULL);
@@ -320,29 +329,31 @@ int main(int argc, char const *argv[]){
 
     deleteFolderContent("tmp");//se existir ficheiros de fifos na pasta tmp remover todos os ficheiros
     
-    // -------------- creating fifo's -------------- 
-    if((res = mkfifo("tmp/fifoWrite",0622)) == ERROR){// rw-w--w--
-        perror("error creating the fifo Write(client))");
-        return ERROR;
-    }
-    if((res = mkfifo("tmp/fifoRead",0644)) == ERROR){// rw-r--r--
-        perror("error creating the fifo Read(client))");
-        return ERROR;
-    }
-
-    printf("Ready to accept client requests\n");
     // -------------- handle a cliente -------------- 
     
-    int fifoR, fifoW, fifoU, n;
+    int fifoR=-1, fifoW, fifoU, n;
     char* buf = malloc(1024);
     char* single_Request = malloc(1024);
 
     pidServidor = getpid();
     while (1){//manter o fifo sempre a espera de mais pedidos
-        if ((fifoW = open("tmp/fifoWrite",O_RDONLY,0622)) == -1){
-            perror("Erro a abrir FIFO");
-            continue;
+        if((res = mkfifo(READ_NAME,0644)) == ERROR){// rw-r--r--
+            perror("error creating the fifo Read(client))");
+            return ERROR;
         }
+        if((res = mkfifo(WRITE_NAME,0622)) == ERROR){// rw-w--w--
+            perror("error creating the fifo Write(client))");
+            return ERROR;
+        }
+        printf("Ready to accept client requests\n");        
+        if ((fifoW = open(WRITE_NAME,O_RDONLY,0622)) == ERROR){
+            perror("Erro a abrir FIFO(write)");
+            continue;
+        }/*
+        if ((fifoR = open(READ_NAME,O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente
+            perror("Erro a abrir FIFO(read)");
+            continue;
+        }*/
 
         printf("leitura em espera");
 
@@ -367,10 +378,7 @@ int main(int argc, char const *argv[]){
                     ;//saber o nr de palavras
 
                 if(nrPals==2){//recebe pedido de status (com pid antes)
-                    if ((fifoR = open("tmp/fifoRead",O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente
-                        perror("Erro a abrir FIFO");
-                        continue;
-                    }
+                    testFifoRead(&fifoR);
                     printf("2palavras");
                     showSatus(fifoR);
                     close(fifoR);
@@ -410,25 +418,38 @@ int main(int argc, char const *argv[]){
                                 removeRunning(idx);// neste processo nao fica nos registos do processo principal!! ver e corrigir
                                 printf("pai: FEEEEIIIIITTTOOOOOO!!!\n");
                                 showConclued(fifoU);
-                                close(fifoU);
-                                close(fifoW);// é preciso?? ou no exit fecha as dependencias??
+                                //close(fifoU);
+                                //close(fifoW);// é preciso?? ou no exit fecha as dependencias??
                                 
                                 //kill(pidServidor, SIGUSR1);//=???
                                 //enviar sinal para acordar pendentes?? conformar se esta bem
                             }
                             _exit(OK);
                         }
-
                     }
                     close(fifoU);//como o filho do filho tem copia do descritor pode usa-la
                     if(newFifoName) free(newFifoName);
                     //dar free nos mallocs todos(palavras e afins)
                 }
                 printf("acabei 1 pedido\n");
+                for (int i = 0; i < 77; i++){
+                    if(palavras[i]) free(palavras[i]);//passar também o nr de palavras?? previne malocs a mais
+                }
+                
             }
             printf("buffer vazio desde que li\n");
         }
+        if(n==ERROR){
+            perror("error reading from fifoW");
+            continue;
+        }
         close(fifoW);
+        close(fifoR);
+        unlink(WRITE_NAME);
+        unlink(READ_NAME);
+        deleteFolderContent("tmp");
+
+        sleep(60);
     }
     
 
