@@ -341,12 +341,12 @@ int main(int argc, char const *argv[]){
     while (1){//manter o fifo sempre a espera de mais pedidos
         if ((fifoW = open("tmp/fifoWrite",O_RDONLY,0622)) == -1){
             perror("Erro a abrir FIFO");
-            continue;;
+            continue;
         }
 
         printf("leitura em espera");
 
-        while((n = read(fifoW,buf,1024)) > 0){//ler do cliente
+        while((n = read(fifoW,buf,1024)) > 0){//ler do cliente     !!!nas vezes depois nao fica bloqueado aqui
             printf("li alguma coisa");
             while(buf && strcmp(buf,"")){//tratar do varios pedidos que ja estão no buffer
                 // ver aquilo que o stor disse sobre o buff_ (aula azula) não escrever logo no file descritor
@@ -395,11 +395,11 @@ int main(int argc, char const *argv[]){
                         showPendent(fifoU);
                     }
                     else{
+                        int idx = addRunning(position);
                         if(!fork()){// para não deixar o processo que corre o servidor à espera fazer double fork 
-                            int idx, status;
+                            int status;
                             if (!fork()){
                                 showRunning(fifoU);
-                                idx = addRunning(position);
 
                                 redirecionar(palavras[2], palavras[3]);
                                 aplicarTransformacoes(&(palavras[4]), nrPals-4);
@@ -407,16 +407,18 @@ int main(int argc, char const *argv[]){
                             }
                             else{
                                 wait(&status);
-                                removeRunning(idx);// por causa do exec isto acontece??
+                                removeRunning(idx);// neste processo nao fica nos registos do processo principal!! ver e corrigir
                                 printf("pai: FEEEEIIIIITTTOOOOOO!!!\n");
                                 showConclued(fifoU);
-                                close(fifoU);//==ERROR) printf("erro a fechar fifo unico\n");//nao esta a acabar porque??
-                                //else printf("fechei fifoUnico!!!\n");
+                                close(fifoU);
+                                close(fifoW);// é preciso?? ou no exit fecha as dependencias??
+                                
                                 //kill(pidServidor, SIGUSR1);//=???
                                 //enviar sinal para acordar pendentes?? conformar se esta bem
                             }
                             _exit(OK);
                         }
+
                     }
                     close(fifoU);//como o filho do filho tem copia do descritor pode usa-la
                     if(newFifoName) free(newFifoName);

@@ -72,6 +72,7 @@ int main(int argc, char const *argv[]){
     }
     else if(argc>=5 && !strcmp(argv[1], "proc-file")){// ./sdstore proc-file file-in file-out transf1...
         if(verificarSintax(&(argv[4]), argc-4)==argc-4){
+            printf("abri o write\n");
             if ((fd=open("tmp/fifoWrite", O_WRONLY))==ERROR){
                 perror("error opening fifoWrite");
                 return ERROR;
@@ -88,22 +89,23 @@ int main(int argc, char const *argv[]){
             free(pidStr);
             
             write(fd, buffer, strlen(buffer));
+            close(fd);//nao sei se devemos fazer
             
             char* newFifoName = malloc(1024);
             sprintf(newFifoName, "tmp/fifoRead%d", pid);//fifo especifico para receber mensagens só neste precesso
-            sleep(1);//fazer com que este sleep desapareça
+            //sleep(5);//fazer com que este sleep desapareça
             if ((fd=open(newFifoName, O_RDONLY))==ERROR){
-                perror("error opening fifoRead");
+                perror("error opening fifoRead(unico)");
                 return ERROR;
             }
-            
+
             while((n = read(fd,buffer,1024)) > 0){
                 write(STDOUT_FILENO,buffer,n);
             }
-
-            printf("acabei de ler\n");
+            
             close(fd);
-            printf("fechei\n");
+            remove(newFifoName);
+            
             if(buffer) free(buffer);
             if(newFifoName) free(newFifoName);
         }
