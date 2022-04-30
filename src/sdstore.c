@@ -39,89 +39,67 @@ int main(int argc, char const *argv[]){
     setbuf(stdout, NULL);
     int fd, n, res;
     int pid=getpid();
-
+    
     if(argc==1){// ./sdstore
         char* info = "./sdstore status\n./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2 ...\n";
         write(STDOUT_FILENO, info, strlen(info));
     }
-    else if(argc==2 && !strcmp(argv[1],"status")){// ./sdstore status
+    else if((argc==2 && !strcmp(argv[1],"status")) || (argc>=5 && !strcmp(argv[1], "proc-file"))){// ./sdstore status
+        char* newFifoName = malloc(1024);
+        sprintf(newFifoName, "%s%d", READ_NAME, pid);//fifo especifico para receber mensagens só neste precesso
+        if((res = mkfifo(newFifoName, 0644)) == ERROR){// rw-r--r--
+            perror("error creating the fifo Read(client)");
+            free(newFifoName);
+            return ERROR;
+        }
+
         if ((fd=open(WRITE_NAME, O_WRONLY))==ERROR){
             perror("error opening fifoWrite");
+            unlink(newFifoName);
+            free(newFifoName);
             return ERROR;
         }
-        char* buffer = malloc(1024);//make it non static
-        sprintf(buffer, "%d status\n", pid);//pid deste processo antes do comando
-        write(fd, buffer, strlen(buffer));
-        printf("enviei para o fifo %d a msg:%s\n", fd, buffer);
-        if ((fd=open(READ_NAME, O_RDONLY))==ERROR){//adicionar o pid
-            perror("error opening fifoRead");
+        Pedido req = malloc(sizeof(struct pedido));
+        for (int i = 1; i < argc; i++){
+            strcpy(req->args[i], argv[i]);
+        }
+        sprintf(req->args[0], "%d", pid);
+        req->elems = argc;
+        
+        /*sprintf(buffer, "%d status\n", pid);//pid deste processo antes do comando
+        write(fd, buffer, strlen(buffer)+1);
+        printf("enviei para o fifo %d a msg:%s\n", fd, buffer);*/
+        printf("PID->%d<-\n", pid);
+        write(fd, req, sizeof(struct pedido));
+
+        if ((fd=open(newFifoName, O_RDONLY))==ERROR){
+            perror("error opening fifoRead(unico)");
+            unlink(newFifoName);
+            free(newFifoName);
+            free(req);
+            //dar free's, avisar avisar servidor??
             return ERROR;
         }
+        char* buffer = malloc(1024);
         while((n = read(fd,buffer,1024)) > 0){
             write(STDOUT_FILENO,buffer,n);
         }
 
         close(fd);
-
-        free(buffer);
         
         if(n==ERROR){
             perror("error reading from fifo");
             return ERROR;
         }
-    }
-    else if(argc>=5 && !strcmp(argv[1], "proc-file")){// ./sdstore proc-file file-in file-out transf1...
-        if(verificarSintax(&(argv[4]), argc-4)==argc-4){
-            printf("abri o write\n");
-            if ((fd=open("tmp/fifoWrite", O_WRONLY))==ERROR){
-                perror("error opening fifoWrite");
-                return ERROR;
-            }
-            char* buffer = malloc(1024);
-            strcpy(buffer, "");
-            for (int i = 1; i < argc; i++){
-                strcpy(buffer, concatStrings(buffer, concatStrings((char*)argv[i], " ")));
-            }
-            
-            char* pidStr = malloc(1024);
-            sprintf(pidStr, "%d ", pid);
-            strcpy(buffer, concatStrings(pidStr, buffer)); //pid deste processo antes do comando
-            free(pidStr);
-            
-            res = write(fd, buffer, strlen(buffer));
-            if(res==ERROR){
-                perror("error writing in fifoW");
-                return ERROR;
-            }
-            close(fd);//nao sei se devemos fazer
-            
-            char* newFifoName = malloc(1024);
-            sprintf(newFifoName, "tmp/fifoRead%d", pid);//fifo especifico para receber mensagens só neste precesso
-            sleep(1);//fazer com que este sleep desapareça
-            if ((fd=open(newFifoName, O_RDONLY))==ERROR){
-                perror("error opening fifoRead(unico)");
-                return ERROR;
-            }
-
-            while((n = read(fd,buffer,1024)) > 0){
-                write(STDOUT_FILENO,buffer,n);
-            }
-            
-            close(fd);
-            unlink(newFifoName);
-            
-            if(buffer) free(buffer);
-            if(newFifoName) free(newFifoName);
-        }
-        else{
-            perror("syntax error in the transformations");
-            return ERROR;
-        }
+        unlink(newFifoName);
+        free(newFifoName);
+        free(req);
+        free(buffer);
     }
     else{
         perror("error on the input arguments");
         return ERROR;
     }
 
-    return 1;
+    return OK;
 }

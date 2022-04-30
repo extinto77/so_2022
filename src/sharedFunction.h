@@ -11,6 +11,17 @@
 #ifndef __SHARED_F__
 #define __SHARED_F__
 
+
+#define STATUS 1
+#define PROC_FILE 2
+
+typedef struct pedido{
+    int elems;
+    char args[77][1024];// meter "status\n" se for do tipo STATUS
+}*Pedido;
+
+
+
 #define ERROR -1
 #define OK 1
 

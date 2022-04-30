@@ -30,7 +30,7 @@ char* tasks[777];//todos os pedidos enviados para o servidor
 
 pid_t pidServidor;
 
-void deleteFolderContent(char* dir){//apagar o conteudo de uma pasta
+void deleteFolderContent(char* dir){//apagar o conteudo de uma pasta, para nao estar sempre a fzaer isto na shell
     DIR *theFolder = opendir(dir);
     struct dirent *next_file;
     char* filepath = malloc(1024);
@@ -95,8 +95,12 @@ int aplicarTransformacoes(char** transformacoes, int nTransformacoes){//assumind
 
         if((pid = fork())==0){
             dup2(p[1],1);
-            close(p[1]);
-            close(p[0]);
+            if(close(p[1])==ERROR){
+                perror("closing fd (aplicar transformacoes)");
+            }
+            if( close(p[0])==ERROR){
+                perror("closing fd (aplicar transformacoes)");
+            }
             //printf("mais que um filtro");
 
             if(execl(concatStrings(concatStrings(transformations_folder, "/"),transformacoes[i]),transformacoes[i],NULL) == ERROR){
@@ -106,13 +110,17 @@ int aplicarTransformacoes(char** transformacoes, int nTransformacoes){//assumind
         }
         else{
             dup2(p[0],0);
-            close(p[0]);
-            close(p[1]);
+            if(close(p[0])==ERROR){
+                perror("closing fd (aplicar transformacoes)");
+            }
+            if(close(p[1])){
+                perror("closing fd (aplicar transformacoes)");
+            }
         }
     }
     //printf("--FILTRO:%s--\n", concatStrings(concatStrings(transformations_folder, "/"),transformacoes[i]));
     if(execl(concatStrings(concatStrings(transformations_folder, "/"),transformacoes[i]),transformacoes[i],NULL) == ERROR){
-    perror("Erro a aplicar filtro");
+        perror("Erro a aplicar filtro");
         return(ERROR);
     }
     return OK;//nunca chega aqui??
@@ -152,7 +160,7 @@ void removeRunning(int index){
     runningRequestsIdx[nrrunningRequests]=-1;
 }
 
-void showSatus(int fifo){//ver melhor o input
+void showSatus(int fifo){
     char* buf = malloc(1024);
     strcpy(buf, "---RUNING REQUESTS---\n");
     write(fifo, buf, strlen(buf));
@@ -216,6 +224,7 @@ int goPendingOrNot(char** transformacoes, int nTransformacoes){
         }
     }
     return OK;
+
 }
 
 /*
@@ -281,17 +290,6 @@ void handler(int s){
 }
 */
 
-int testFifoRead(int *fd){
-    int n;
-    if ((n=write((*fd), TEST, strlen(TEST)))==ERROR){
-        perror("nao esta aberto");
-        if (((*fd) = open(READ_NAME,O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente
-            perror("Erro a abrir FIFO(read)");
-            return ERROR;
-        }
-    }
-    return OK;    
-}
 
 
 int main(int argc, char const *argv[]){
@@ -310,8 +308,7 @@ int main(int argc, char const *argv[]){
     if((res = readConfigFile((char*)argv[1])) == ERROR){
         return ERROR;
     }
-    transformations_folder=malloc(1024);
-    strcpy(transformations_folder, (char*)argv[2]);
+    transformations_folder = strdup((char*)argv[2]);
 
     // -------------- inicializations -------------- 
     nrpendingRequests=0;
@@ -327,129 +324,116 @@ int main(int argc, char const *argv[]){
         tasks[i]=NULL;
     }
 
-    deleteFolderContent("tmp");//se existir ficheiros de fifos na pasta tmp remover todos os ficheiros
     
     // -------------- handle a cliente -------------- 
     
-    int fifoR=-1, fifoW, fifoU, n;
-    char* buf = malloc(1024);
-    char* single_Request = malloc(1024);
+    int fifoW, fifoU, n;
 
     pidServidor = getpid();
     while (1){//manter o fifo sempre a espera de mais pedidos
-        if((res = mkfifo(READ_NAME,0644)) == ERROR){// rw-r--r--
-            perror("error creating the fifo Read(client))");
+        deleteFolderContent("tmp");//se existir ficheiros de fifos na pasta tmp remover todos os ficheiros, apagar depois !!!!!!!
+        
+        if((res = mkfifo(WRITE_NAME, 0622)) == ERROR){// rw-w--w--
+            perror("error creating the fifo Write(client)");
             return ERROR;
         }
-        if((res = mkfifo(WRITE_NAME,0622)) == ERROR){// rw-w--w--
-            perror("error creating the fifo Write(client))");
-            return ERROR;
-        }
+        //as permissoes podem mudar, para prevenir vamos acertar as permissoes
+        chmod(WRITE_NAME, 0622);
+
         printf("Ready to accept client requests\n");        
-        if ((fifoW = open(WRITE_NAME,O_RDONLY,0622)) == ERROR){
+        if ((fifoW = open(WRITE_NAME, O_RDONLY, 0622)) == ERROR){
             perror("Erro a abrir FIFO(write)");
             continue;
-        }/*
-        if ((fifoR = open(READ_NAME,O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente
-            perror("Erro a abrir FIFO(read)");
-            continue;
-        }*/
+        }
+        Pedido temporary = malloc(sizeof(struct pedido));
 
         printf("leitura em espera");
+        while((n = read(fifoW,temporary,sizeof(struct pedido))) > 0){//ler do cliente     !!!nas vezes depois nao fica bloqueado aqui
+            printf("--struct-->%d-", temporary->elems);
+            int nrPals = temporary->elems;
+            char* palavras[nrPals];
+            for (int i = 0; i < nrPals; i++){
+                palavras[i]=strdup(temporary->args[i]);
+            }
 
-        while((n = read(fifoW,buf,1024)) > 0){//ler do cliente     !!!nas vezes depois nao fica bloqueado aqui
-            printf("li alguma coisa");
-            while(buf && strcmp(buf,"")){//tratar do varios pedidos que ja estão no buffer
-                // ver aquilo que o stor disse sobre o buff_ (aula azula) não escrever logo no file descritor
-                printf("recebi pedido\n");
-                
-                char* copy = malloc(1024);
-                single_Request = strsep(&buf,"\n");
-                printf("recebido: %s\n", single_Request);
-                strcpy(copy, single_Request); 
-                char* palavras[77];
-                for (int i = 0; i < 77; i++){
-                    palavras[i]=malloc(1024);//passar também o nr de palavras?? previne malocs a mais
-                }
-                
-                parse(single_Request, ' ', palavras);
-                int nrPals;
-                for (nrPals = 0; palavras[nrPals]!=NULL; nrPals++)
-                    ;//saber o nr de palavras
-
-                if(nrPals==2){//recebe pedido de status (com pid antes)
-                    testFifoRead(&fifoR);
-                    printf("2palavras");
-                    showSatus(fifoR);
-                    close(fifoR);
-                }
-                else{//pid proc-file file-in file-out transf1...
+            if(nrPals==2){//recebe pedido de status (com pid antes)
+                if(!fork()){
                     char* newFifoName = malloc(1024);
-                    sprintf(newFifoName, "tmp/fifoRead%s",palavras[0]);//fifo especifico para enviar mensagens para processo especifico
+                    sprintf(newFifoName, "%s%s",READ_NAME, palavras[0]);//fifo especifico para enviar mensagens para processo especifico
                     printf("--%s--\n", newFifoName);
-                    if((res = mkfifo(newFifoName,0644)) == ERROR){// rw--r--r-
-                        perror("error creating the fifo Read(one client))");
-                        continue;
-                    }
+
                     if ((fifoU = open(newFifoName,O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente
-                        perror("Erro a abrir FIFO");
+                        perror("Erro a abrir FIFO(read)");
+                        free(newFifoName);
                         continue;
                     }
 
-                    
-                    int position = addTask(single_Request);
-                    if( goPendingOrNot(&(palavras[1]), nrPals-1) == OK ){//passar o pid à frente, fica pendente
-                        addPending(position);//esperar ate que o sinal SIGSUR1 faca a sua parte 
-                        showPendent(fifoU);
-                    }
-                    else{
-                        int idx = addRunning(position);
-                        if(!fork()){// para não deixar o processo que corre o servidor à espera fazer double fork 
-                            int status;
-                            if (!fork()){
-                                showRunning(fifoU);
+                    printf("2palavras");
+                    showSatus(fifoU);
+                    close(fifoU);
+                }
+            }
+            else{//pid proc-file file-in file-out transf1...
+                char* newFifoName = malloc(1024);
+                sprintf(newFifoName, "%s%s",READ_NAME, palavras[0]);//fifo especifico para enviar mensagens para processo especifico
+                printf("--%s--\n", newFifoName);
 
-                                redirecionar(palavras[2], palavras[3]);
-                                aplicarTransformacoes(&(palavras[4]), nrPals-4);
-                                _exit(OK);
-                            }
-                            else{
-                                wait(&status);
-                                removeRunning(idx);// neste processo nao fica nos registos do processo principal!! ver e corrigir
-                                printf("pai: FEEEEIIIIITTTOOOOOO!!!\n");
-                                showConclued(fifoU);
-                                //close(fifoU);
-                                //close(fifoW);// é preciso?? ou no exit fecha as dependencias??
-                                
-                                //kill(pidServidor, SIGUSR1);//=???
-                                //enviar sinal para acordar pendentes?? conformar se esta bem
-                            }
+                if ((fifoU = open(newFifoName,O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente
+                    perror("Erro a abrir FIFO(read)");
+                    free(newFifoName);
+                    continue;
+                }
+                printf("abri unico\n");
+                //int position = addTask(single_Request);
+                if( goPendingOrNot(&(palavras[1]), nrPals-1) == OK ){//passar o pid à frente, fica pendente
+                    printf("pendente\n");
+                    //addPending(position);//esperar ate que o sinal SIGSUR1 faca a sua parte 
+                    showPendent(fifoU);
+                }
+                else{
+                    printf("nao pendente\n");
+                    //int idx = addRunning(position);
+                    if(!fork()){// para não deixar o processo que corre o servidor à espera fazer double fork 
+                        int status;
+                        if (!fork()){
+                            showRunning(fifoU);
+
+                            redirecionar(palavras[2], palavras[3]);
+                            aplicarTransformacoes(&(palavras[4]), nrPals-4);
                             _exit(OK);
                         }
+                        else{
+                            wait(&status);
+                            //removeRunning(idx);// neste processo nao fica nos registos do processo principal!! ver e corrigir
+                            printf("pai: FEEEEIIIIITTTOOOOOO!!!\n");
+                            showConclued(fifoU);
+                            //close(fifoU);
+                            //close(fifoW);// é preciso?? ou no exit fecha as dependencias??
+                            
+                            //kill(pidServidor, SIGUSR1);//=???
+                            //enviar sinal para acordar pendentes?? conformar se esta bem
+                        }
+                        _exit(OK);
                     }
-                    close(fifoU);//como o filho do filho tem copia do descritor pode usa-la
-                    if(newFifoName) free(newFifoName);
-                    //dar free nos mallocs todos(palavras e afins)
                 }
-                printf("acabei 1 pedido\n");
-                for (int i = 0; i < 77; i++){
-                    if(palavras[i]) free(palavras[i]);//passar também o nr de palavras?? previne malocs a mais
-                }
-                
+                close(fifoU);//como o filho do filho tem copia do descritor pode usa-la
+                free(newFifoName);
+                //dar free nos mallocs todos(palavras e afins)
             }
-            printf("buffer vazio desde que li\n");
+            printf("acabei 1 pedido\n");
+                
+            //}
+            //printf("buffer vazio desde que li\n");
+            //sleep(5);
         }
         if(n==ERROR){
             perror("error reading from fifoW");
-            continue;
+            //continue;
         }
         close(fifoW);
-        close(fifoR);
         unlink(WRITE_NAME);
-        unlink(READ_NAME);
-        deleteFolderContent("tmp");
 
-        sleep(60);
+        //sleep(20);
     }
     
 
@@ -458,6 +442,6 @@ int main(int argc, char const *argv[]){
     // -------------- fazer sempre no fim -------------- 
     //existe o finally??
 
-    if(transformations_folder) free(transformations_folder);
+    free(transformations_folder);
     return 0;
 }
