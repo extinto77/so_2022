@@ -66,10 +66,7 @@ int main(int argc, char const *argv[]){
         sprintf(req->args[0], "%d", pid);
         req->elems = argc;
         
-        /*sprintf(buffer, "%d status\n", pid);//pid deste processo antes do comando
-        write(fd, buffer, strlen(buffer)+1);
-        printf("enviei para o fifo %d a msg:%s\n", fd, buffer);*/
-        printf("PID->%d<-\n", pid);
+        printf("[Debug]PID->%d<-\n", pid);
         write(fd, req, sizeof(struct pedido));
 
         if ((fd=open(newFifoName, O_RDONLY))==ERROR){
