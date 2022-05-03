@@ -47,38 +47,50 @@ void deleteFolderContent(char* dir){//apagar o conteudo de uma pasta, para nao e
     closedir(theFolder);
 }
 
-int readConfigFile(char *path){// REFAZER SEM O 'fopen' !!!!!!!!!!!
-    //printf("%s\n",path);
-    FILE * fp = fopen(path, "r");
-    if (fp == NULL){
-        perror("error reading config file");
+int readConfigFile(char *path){// só lê 1024... se for maior ardeu FALTA TESTAR
+    int fd;
+    if((fd = open(path,O_RDONLY)) == ERROR){
+        perror("error opening config file");
         return ERROR;
     }
     else{
-        char * line = malloc(1024);
-        size_t size = 0;
-        ssize_t read;
+        char* line = malloc(1024);
+        int bytes_read;
+
+        if((bytes_read=read(fd,line,1024))==ERROR){
+            perror("reading config file");
+            if (line) free(line);
+            return ERROR; 
+        }
         char* string = malloc(1024);
-        int nr;
-        while ((read = getline(&line, &size, fp)) > 0) {
-            read = sscanf(line, "%s %d" , string, &nr);
-            if(read != 2){
+        int nr, i, lineNr=0;
+        for (i = 0; i < bytes_read; i++){
+            if(line[i]=='\n')
+                lineNr++;
+        }
+        for(i=0;i<lineNr;i++){ 
+            strcpy(string, strsep(&line, "\n"));
+            char*temp=malloc(1024);
+            int n = sscanf(string, "%s %d" , temp, &nr);
+            if(n != 2){
                 perror("erro de sintaxe no ficheiro config");
                 if (line) free(line);
                 if (string) free(string);
-                return ERROR;
+                //
+                continue;
             }
-
+            
             for (int i = 0; i < TRANS_NR; i++){
                 if (!strcmp(string, transformacoesNome[i])){
                     config[i]=nr;
-                    //printf("--%s->%d\n", transformacoesNome[i], nr);
+                    printf("--%s->%d\n", transformacoesNome[i], nr);
                     break;
                 }
             }
+            if(temp)
+                free(temp);
         }
-        fclose(fp);
-        if (line) free(line);
+        close(fd);
         if (string) free(string);
     }
     return OK;
@@ -135,10 +147,23 @@ int addPending(int id){
 }
 
 int addRunning(int id){
+    //consultar tasks para ver filtros e
+    // atualizar array using
+    char** palavras = tasks[id];
+    for (int i = 1; palavras[i]!=NULL; i++){
+        char* filtro = palavras[i];
+        for (int i = 0; i < TRANS_NR; i++){
+            if (!strcmp(filtro, transformacoesNome[i])){
+                config[i]+=1;
+                break;
+            }
+        }
+    }
+    //rever daqui para cima
     runningRequestsIdx[nrrunningRequests] = id;
     nrpendingRequests++;
+
     return nrrunningRequests-1;
-    // atualizar array using
 }
 
 int addTask(char** arr){
@@ -156,7 +181,7 @@ void addWaiting(int pid, int idx){
 void removeWaiting(int pid){
     int i;
     for (i = 0; i < nrwaitingProcess; i++){
-        if(waiting[i]==pid)
+        if(waiting[i][0]==pid)
             break;
     }
     if(i==nrwaitingProcess){
@@ -164,9 +189,9 @@ void removeWaiting(int pid){
         return;
     }
     nrwaitingProcess--;
-    for (int j = i; i < nrwaitingProcess; i++){
-        waiting[i][0] = waiting[i+1][0];
-        waiting[i][1] = waiting[i+1][1];
+    for (int j = i; j < nrwaitingProcess; i++){
+        waiting[j][0] = waiting[j+1][0];
+        waiting[j][1] = waiting[j+1][1];
     }
     waiting[nrwaitingProcess][0] = -1;
     waiting[nrwaitingProcess][1] = -1;
@@ -181,12 +206,25 @@ void removePending(int index){
 }
 
 void removeRunning(int index){
+    //consultar tasks para ver filtros e
+    // atualizar array using
+    char** palavras = tasks[index];
+    for (int i = 1; palavras[i]!=NULL; i++){
+        char* filtro = palavras[i];
+        for (int i = 0; i < TRANS_NR; i++){
+            if (!strcmp(filtro, transformacoesNome[i])){
+                config[i]-=1;
+                break;
+            }
+        }
+    }
+    //rever daqui para cima
+    
     nrrunningRequests--;
     for (int i = index; i < nrrunningRequests; i++){
         runningRequestsIdx[i] = runningRequestsIdx[i+1];
     }
     runningRequestsIdx[nrrunningRequests]=-1;
-    // atualizar array using
 }
 
 void showSatus(int fifo){
@@ -195,7 +233,15 @@ void showSatus(int fifo){
     write(fifo, buf, strlen(buf));
     for(int i=0;i<nrrunningRequests;i++){
         int idx = runningRequestsIdx[i];
-        sprintf(buf,"task #%d: (pid)%s\n", idx, tasks[idx]);//imprime as que estao a correr no momento
+        char**palavras = tasks[idx];
+        char *full= malloc(1024);
+        strcpy(full, "");
+        for (int i = 0; palavras[i]!=NULL; i++){
+            full = concatStrings(full, concatStrings(palavras[i], " "));
+        }
+        sprintf(buf,"task #%d: (pid)%s\n", idx, full);//imprime as que estao a correr no momento
+        if(full)
+            free(full);
         //rever acima a ultima string
         write(fifo, buf, strlen(buf));
     }
@@ -204,7 +250,16 @@ void showSatus(int fifo){
     write(fifo, buf, strlen(buf));
     for(int i=0;i<nrpendingRequests;i++){
         int idx = pendingRequestsIdx[i];
-        sprintf(buf,"pending #%d: (pid)%s\n", idx, tasks[idx]);//imprime as que estao a correr no momento
+        char**palavras = tasks[idx];
+        char *full= malloc(1024);
+        strcpy(full, "");
+        for (int i = 0; palavras[i]!=NULL; i++){
+            full = concatStrings(full, concatStrings(palavras[i], " "));
+        }
+
+        sprintf(buf,"pending #%d: (pid)%s\n", idx, full);//imprime as que estao a correr no momento
+        if(full)
+            free(full);
         //rever acima a ultima string
         write(fifo, buf, strlen(buf));
     }
@@ -337,6 +392,8 @@ int main(int argc, char const *argv[]){
     }
     transformations_folder = strdup((char*)argv[2]);
 
+    deleteFolderContent("tmp");//apagar depois
+
     // -------------- inicializations -------------- 
     nrpendingRequests=0;
     nrrunningRequests=0;
@@ -369,10 +426,6 @@ int main(int argc, char const *argv[]){
     //as permissoes podem mudar, para prevenir vamos acertar as permissoes
     chmod(WRITE_NAME, 0622);
 
-    if ((backbone = open(WRITE_NAME, O_RDONLY, 0622)) == ERROR){//backbone, nunca vai receber EOF na leitura
-        perror("Erro a abrir FIFO(write)");
-        return ERROR;
-    }
 
     printf("[Debug]Ready to accept client requests\n");        
     if ((fifoW = open(WRITE_NAME, O_RDONLY, 0622)) == ERROR){
@@ -380,6 +433,10 @@ int main(int argc, char const *argv[]){
         return ERROR;
     }
     Pedido temporary = malloc(sizeof(struct pedido));
+    if ((backbone = open(WRITE_NAME, O_WRONLY)) == ERROR){//backbone, nunca vai receber EOF na leitura
+        perror("Erro a abrir FIFO(write)");
+        return ERROR;
+    }
 
     printf("leitura em espera");
     while((n = read(fifoW,temporary,sizeof(struct pedido))) > 0){//ler do cliente
@@ -388,7 +445,9 @@ int main(int argc, char const *argv[]){
         char* palavras[nrPals];
         for (int i = 0; i < nrPals; i++){
             palavras[i]=strdup(temporary->args[i]);
+            printf("%s ", palavras[i]);
         }
+        printf("\n");
 
         if(nrPals==2){//recebe pedido de status (com pid antes)
             if(!fork()){
@@ -433,6 +492,7 @@ int main(int argc, char const *argv[]){
                 printf("nao pendente\n");
                 int pid, status1;
                 int idx = addRunning(position);
+                printf("vou fazer fork\n");
                 if((pid=!fork())==0){// para não deixar o processo que corre o servidor à espera fazer double fork 
                     int status2;
                     if (!fork()){
@@ -458,7 +518,7 @@ int main(int argc, char const *argv[]){
                 }
             }
             close(fifoU);//como o filho do filho tem copia do descritor pode usa-la
-            free(newFifoName);
+            if(newFifoName) free(newFifoName);
             //dar free nos mallocs todos(palavras e afins)
         }
         printf("acabei 1 pedido\n");
@@ -469,7 +529,8 @@ int main(int argc, char const *argv[]){
     close(fifoW);
     close(backbone);
     unlink(WRITE_NAME);//unlink nao apaga, logo. só quando todos fecham o fd.
-
-    free(transformations_folder);
+    
+    if(temporary) free(temporary);
+    if(transformations_folder) free(transformations_folder);
     return 0;
 }
