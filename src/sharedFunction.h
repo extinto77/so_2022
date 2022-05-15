@@ -17,7 +17,7 @@
 
 typedef struct pedido{
     int elems;
-    char args[77][1024];// meter "status\n" se for do tipo STATUS
+    char args[22][333];//max de 22 palavras de de 333 de lenght de cada palavra
 }*Pedido;
 
 

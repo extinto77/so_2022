@@ -60,20 +60,29 @@ int main(int argc, char const *argv[]){
             return ERROR;
         }
         Pedido req = malloc(sizeof(struct pedido));
-        for (int i = 1; i < argc; i++){
-            strcpy(req->args[i], argv[i]);
-        }
-        sprintf(req->args[0], "%d", pid);
         req->elems = argc;
+        for (int i = 1; i < argc; i++){
+            char* tmp = strdup(argv[i]);
+            int j;
+            for (j = 0; j < strlen(tmp); j++){
+                req->args[i][j] = tmp[j];
+                //printf("[%c|%c]", req->args[i][j], tmp[j]);
+            }
+            free(tmp);
+            req->args[i][j] = '\0';
+            printf("<%d//%s>", i, req->args[i]);
+        }
+        sprintf(req->args[0], "%d", pid);//ver se isto da assim
         
         printf("[Debug]PID->%d<-\n", pid);
+        //printf(">%p<", req);
         write(fd, req, sizeof(struct pedido));
 
         if ((fd=open(newFifoName, O_RDONLY))==ERROR){
             perror("error opening fifoRead(unico)");
             unlink(newFifoName);
             free(newFifoName);
-            free(req);
+            free(req);// dar free recursivo
             //dar free's, avisar avisar servidor??
             return ERROR;
         }

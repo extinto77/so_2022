@@ -28,7 +28,7 @@ int nrrunningRequests;//numero de pedidos a correr
 int waiting[100][2];// pid | idxTask
 int nrwaitingProcess;
 
-char** tasks[777];//todos os pedidos enviados para o servidor
+Pedido tasks[777];//todos os pedidos enviados para o servidor
 int tasksNr;
 
 pid_t pidServidor;
@@ -96,11 +96,11 @@ int readConfigFile(char *path){// só lê 1024... se for maior ardeu FALTA TESTA
     return OK;
 }
 
-int aplicarTransformacoes(char** transformacoes, int nTransformacoes){//assumindo que o redirecionamento já está feito antes...
-    int i, p[2];
+int aplicarTransformacoes(Pedido req){//assumindo que o redirecionamento já está feito antes...
+    int i, p[2], stat;
     //printf("transNr: %d\n", nTransformacoes);
 
-    for (i=0; i < nTransformacoes-1; i++){
+    for (i=4; i < req->elems-1; i++){
         int res = pipe(p);
         if(res==ERROR){
             perror("error creating pipe");
@@ -108,6 +108,7 @@ int aplicarTransformacoes(char** transformacoes, int nTransformacoes){//assumind
         }
         pid_t pid;
 
+        char* tmp = strdup(req->args[i]);
         if((pid = fork())==0){
             dup2(p[1],1);
             if(close(p[1])==ERROR){
@@ -117,8 +118,7 @@ int aplicarTransformacoes(char** transformacoes, int nTransformacoes){//assumind
                 perror("closing fd (aplicar transformacoes)");
             }
             //printf("mais que um filtro");
-
-            if(execl(concatStrings(concatStrings(transformations_folder, "/"),transformacoes[i]),transformacoes[i],NULL) == ERROR){
+            if(execl(concatStrings(concatStrings(transformations_folder, "/"),tmp),tmp,NULL) == ERROR){
                 perror("Erro a aplicar filtro");
                 _exit(ERROR);
             }
@@ -131,12 +131,20 @@ int aplicarTransformacoes(char** transformacoes, int nTransformacoes){//assumind
             if(close(p[1])){
                 perror("closing fd (aplicar transformacoes)");
             }
+            int status;
+            if(waitpid(pid, &status, WNOHANG) != 0) 
+                free(tmp);//para nao dar erro no exec so dar free se ja nao estiver em uso
         }
     }
-    if(execl(concatStrings(concatStrings(transformations_folder, "/"),transformacoes[i]),transformacoes[i],NULL) == ERROR){
-        perror("Erro a aplicar filtro");
-        return(ERROR);
+    char* tmp = strdup(req->args[i]);
+    if(!fork()){
+        if(execl(concatStrings(concatStrings(transformations_folder, "/"),tmp),tmp,NULL) == ERROR){
+            perror("Erro a aplicar filtro");
+            return(ERROR);
+        }
     }
+    wait(&stat);
+    free(tmp);
     return OK;//nunca chega aqui??
 }
 
@@ -147,11 +155,12 @@ int addPending(int id){
 }
 
 int addRunning(int id){
+    printf("<inicio>");
     //consultar tasks para ver filtros e
     // atualizar array using
-    char** palavras = tasks[id];
-    for (int i = 1; palavras[i]!=NULL; i++){
-        char* filtro = palavras[i];
+    for (int i = 1; i < tasks[id]->elems; i++){
+        printf("!for%d!", i);
+        char* filtro = tasks[id]->args[i];
         for (int i = 0; i < TRANS_NR; i++){
             if (!strcmp(filtro, transformacoesNome[i])){
                 config[i]+=1;
@@ -164,10 +173,12 @@ int addRunning(int id){
     nrpendingRequests++;
 
     return nrrunningRequests-1;
+    printf("<fim>");
 }
 
-int addTask(char** arr){
-    tasks[tasksNr] = arr;
+int addTask(Pedido temp){
+    tasks[tasksNr] = malloc(sizeof(struct pedido));
+    tasks[tasksNr] = temp;
     tasksNr++;
     return tasksNr-1;
 }
@@ -208,9 +219,8 @@ void removePending(int index){
 void removeRunning(int index){
     //consultar tasks para ver filtros e
     // atualizar array using
-    char** palavras = tasks[index];
-    for (int i = 1; palavras[i]!=NULL; i++){
-        char* filtro = palavras[i];
+    for (int i = 1; i < tasks[index]->elems; i++){
+        char* filtro = tasks[index]->args[i];
         for (int i = 0; i < TRANS_NR; i++){
             if (!strcmp(filtro, transformacoesNome[i])){
                 config[i]-=1;
@@ -233,11 +243,10 @@ void showSatus(int fifo){
     write(fifo, buf, strlen(buf));
     for(int i=0;i<nrrunningRequests;i++){
         int idx = runningRequestsIdx[i];
-        char**palavras = tasks[idx];
         char *full= malloc(1024);
         strcpy(full, "");
-        for (int i = 0; palavras[i]!=NULL; i++){
-            full = concatStrings(full, concatStrings(palavras[i], " "));
+        for (int i = 0; i < tasks[idx]->elems; i++){
+            full = concatStrings(full, concatStrings(tasks[idx]->args[i], " "));
         }
         sprintf(buf,"task #%d: (pid)%s\n", idx, full);//imprime as que estao a correr no momento
         if(full)
@@ -250,11 +259,10 @@ void showSatus(int fifo){
     write(fifo, buf, strlen(buf));
     for(int i=0;i<nrpendingRequests;i++){
         int idx = pendingRequestsIdx[i];
-        char**palavras = tasks[idx];
         char *full= malloc(1024);
         strcpy(full, "");
-        for (int i = 0; palavras[i]!=NULL; i++){
-            full = concatStrings(full, concatStrings(palavras[i], " "));
+        for (int i = 0; i < tasks[idx]->elems; i++){
+            full = concatStrings(full, concatStrings(tasks[idx]->args[i], " "));
         }
 
         sprintf(buf,"pending #%d: (pid)%s\n", idx, full);//imprime as que estao a correr no momento
@@ -288,18 +296,21 @@ void showConclued(int fifo){
     write(fifo, SERVICE_FINISHED, strlen(SERVICE_FINISHED));//+1??
 }
 
-int goPendingOrNot(char** transformacoes, int nTransformacoes){
+int goPendingOrNot(Pedido req){
     int after[TRANS_NR];
     for (int i = 0; i < TRANS_NR; i++){
         after[i] = using[i];
     }
-    for (int i = 0; i < nTransformacoes; i++){
+    for (int i = 4; i < req->elems; i++){
+        char* tmp =strdup(req->args[i]);
+        printf("testfilter:<%s>\n", tmp);
         for(int j=0;j<TRANS_NR;j++){
-            if(!strcmp(transformacoes[i], transformacoesNome[j])){
+            if(!strcmp(tmp, transformacoesNome[j])){
                 after[j]++;
                 break;
             }
         }
+        free(tmp);
     }
     for (int i = 0; i < TRANS_NR; i++){
         if(after[i]>config[i]){
@@ -408,10 +419,6 @@ int main(int argc, char const *argv[]){
         waiting[i][0] = -1;
         waiting[i][1] = -1;
     }
-    for (int i = 0; i < 777; i++){
-        tasks[i]=NULL;
-    }
-
     
     // -------------- handle a cliente -------------- 
     
@@ -438,22 +445,28 @@ int main(int argc, char const *argv[]){
         return ERROR;
     }
 
-    printf("leitura em espera");
     while((n = read(fifoW,temporary,sizeof(struct pedido))) > 0){//ler do cliente
-        printf("--struct-->%d-", temporary->elems);
-        int nrPals = temporary->elems;
-        char* palavras[nrPals];
-        for (int i = 0; i < nrPals; i++){
-            palavras[i]=strdup(temporary->args[i]);
-            printf("%s ", palavras[i]);
+        //printf("--struct-->%p---", temporary);
+        Pedido infoStruct = malloc(sizeof(struct pedido));
+        //infoStruct->elems = temporary->elems;
+        //infoStruct->args = malloc(sizeof(char*) * infoStruct->elems);
+        infoStruct = temporary;
+        printf("<FOR-%d->", infoStruct->elems);
+        printf("<FOR-%d->", temporary->elems);
+        for (int i = 0; i < temporary->elems; i++){
+            printf(">|%s|<", temporary->args[i]);//erro a aceder aqui
+            //infoStruct->args[i] = malloc(strlen(temporary->args[i]));
+            //printf("malloc\n");
+            //strcpy(infoStruct->args[i], temporary->args[i]);
+            printf("%s>\n", infoStruct->args[i]);
         }
         printf("\n");
 
-        if(nrPals==2){//recebe pedido de status (com pid antes)
+        if(infoStruct->elems==2){//recebe pedido de status (com pid antes)
             if(!fork()){
                 //------Abertura de um fifo unico para o Cliente--------
                 char* newFifoName = malloc(1024);
-                sprintf(newFifoName, "%s%s",READ_NAME, palavras[0]);//fifo especifico para enviar mensagens para processo especifico
+                sprintf(newFifoName, "%s%s",READ_NAME, infoStruct->args[0]);//fifo especifico para enviar mensagens para processo especifico
                 printf("--%s--\n", newFifoName);
 
                 if ((fifoU = open(newFifoName,O_WRONLY, 0644)) == ERROR){//em vez de usar sinais tornar o fifo único para o cliente
@@ -471,8 +484,8 @@ int main(int argc, char const *argv[]){
         else{//pid proc-file file-in file-out transf1...
             //------Abertura de um fifo unico para o Cliente--------
             char* newFifoName = malloc(1024);
-            sprintf(newFifoName, "%s%s",READ_NAME, palavras[0]);//fifo especifico para enviar mensagens para processo especifico
-                        //printf("--%s--\n", newFifoName);
+            sprintf(newFifoName, "%s%s",READ_NAME, infoStruct->args[0]);//fifo especifico para enviar mensagens para processo especifico
+            printf("--%s--\n", newFifoName);
             if ((fifoU = open(newFifoName,O_WRONLY, 0644)) == ERROR){
                 perror("Erro a abrir FIFO(read)");
                 free(newFifoName);
@@ -482,28 +495,29 @@ int main(int argc, char const *argv[]){
 
             
 
-            int position = addTask(palavras);//rever !!!!!
-            if( goPendingOrNot(&(palavras[1]), nrPals-1) == OK ){//passar o pid à frente, fica pendente
+            int position = addTask(infoStruct);//rever !!!!!
+            printf("--testing pendente--\n");
+            if( goPendingOrNot(infoStruct) == OK ){//passar o pid à frente, fica pendente
                 printf("pendente\n");
                 addPending(position);//esperar ate que o sinal SIGSUR1 faca a sua parte 
                 showPendent(fifoU);
             }
             else{
                 printf("nao pendente\n");
-                int pid, status1;
+                int pid1, pid2, status1;
                 int idx = addRunning(position);
                 printf("vou fazer fork\n");
-                if((pid=!fork())==0){// para não deixar o processo que corre o servidor à espera fazer double fork 
+                if((pid1=!fork())==0){// para não deixar o processo que corre o servidor à espera fazer double fork 
                     int status2;
-                    if (!fork()){
+                    if ((pid2=!fork())==0){
                         showRunning(fifoU);
 
-                        redirecionar(palavras[2], palavras[3]);
-                        aplicarTransformacoes(&(palavras[4]), nrPals-4);
+                        redirecionar(infoStruct->args[2], infoStruct->args[3]);
+                        aplicarTransformacoes(infoStruct);
                         _exit(OK);
                     }
                     else{
-                        wait(&status2);
+                        waitpid(pid2, &status2, 0);
                         printf("pai: FEEEEIIIIITTTOOOOOO!!!\n");
                         showConclued(fifoU);
                         //kill(pidServidor, SIGUSR1);//=???
@@ -511,8 +525,8 @@ int main(int argc, char const *argv[]){
                     }
                     _exit(OK);
                 }else{
-                    if(waitpid(pid, &status1, WNOHANG)==0)
-                        addWaiting(pid, position);
+                    if(waitpid(pid1, &status1, WNOHANG)==0)
+                        addWaiting(pid1, position);
                     else
                         removeRunning(idx);
                 }
@@ -531,6 +545,9 @@ int main(int argc, char const *argv[]){
     unlink(WRITE_NAME);//unlink nao apaga, logo. só quando todos fecham o fd.
     
     if(temporary) free(temporary);
+
+    // na graciosa ir a todas as tasks e dar free em todas as structs, recursivamente tb
+
     if(transformations_folder) free(transformations_folder);
     return 0;
 }
