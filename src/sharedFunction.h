@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <signal.h>
 
 #ifndef __SHARED_F__
 #define __SHARED_F__
@@ -35,6 +36,8 @@ typedef struct pedido{
 
 #define TRANS_NR 7
 
+#define ALARM_TIME 20 // ver se aumentar ou nao
+
 #define SERVICE_PENDENT "Request status: PENDENT\n"
 #define SERVICE_RUNNING "Request status: RUNNING\n"
 #define SERVICE_FINISHED "Request status: FINISHED\n"
@@ -46,6 +49,7 @@ typedef struct pedido{
 
 #define READ_NAME "tmp/fifoRead"
 #define WRITE_NAME "tmp/fifoWrite"
+
 
 void parse(char* string, char delimiter, char**result);
 
