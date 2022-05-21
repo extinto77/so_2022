@@ -32,6 +32,8 @@ Pedido tasks[777];//todos os pedidos enviados para o servidor
 int tasksNr;
 
 pid_t pidServidor;
+int backbone;
+int alrm;
 
 void deleteFolderContent(char* dir){//apagar o conteudo de uma pasta, para nao estar sempre a fzaer isto na shell
     DIR *theFolder = opendir(dir);
@@ -101,7 +103,7 @@ int readConfigFile(char *path){// só lê 1024... se for maior ardeu FALTA TESTA
 }
 
 int aplicarTransformacoes(Pedido req){//assumindo que o redirecionamento já está feito antes...
-    int i, p[2], stat;
+    int i, p[2];
     //printf("transNr: %d\n", nTransformacoes);
 
     for (i=4; i < req->elems-1; i++){
@@ -141,30 +143,23 @@ int aplicarTransformacoes(Pedido req){//assumindo que o redirecionamento já est
         }
     }
     char* tmp = strdup(req->args[i]);
-    if(!fork()){
-        if(execl(concatStrings(concatStrings(transformations_folder, "/"),tmp),tmp,NULL) == ERROR){
-            perror("Erro a aplicar filtro");
-            _exit(ERROR);
-        }
-        else
-            _exit(OK);
+    if(execl(concatStrings(concatStrings(transformations_folder, "/"),tmp),tmp,NULL) == ERROR){
+        perror("Erro a aplicar filtro");
+        free(tmp);
+        return(ERROR);
     }
-    wait(&stat);
-
     free(tmp);
-    return (WEXITSTATUS(stat));
+    return OK;
 }
 
-int addPending(int id, int fifoU){
-    pendingRequestsIdx[nrpendingRequests][0] = id;
+int addPending(int idxTask, int fifoU){//adiciona ao fim da fila o idxTask e o fifoU da tarefa que fica pendente
+    pendingRequestsIdx[nrpendingRequests][0] = idxTask;
     pendingRequestsIdx[nrpendingRequests][1] = fifoU;
     nrpendingRequests++;
     return nrpendingRequests-1;
 }
 
-int addRunning(int id){
-    //consultar tasks para ver filtros e
-    // atualizar array using
+int addRunning(int id){//adiciona ao fim da fila o idxTask que passa vai ficar a correr e atualiza array using
     for (int i = 4; i < tasks[id]->elems; i++){
         char* filtro = tasks[id]->args[i];
         for (int i = 0; i < TRANS_NR; i++){
@@ -174,15 +169,13 @@ int addRunning(int id){
             }
         }
     }
-    //rever daqui para cima
     runningRequestsIdx[nrrunningRequests] = id;
     nrpendingRequests++;
 
     return nrrunningRequests-1;
 }
 
-int addTask(Pedido temp){
-    //tasks[tasksNr] = malloc(sizeof(struct pedido));
+int addTask(Pedido temp){//adiciona a struct ao fim da fila 
     tasks[tasksNr] = temp;
     tasksNr++;
     return tasksNr-1;
@@ -333,73 +326,17 @@ int goPendingOrNot(Pedido req){
     return OK;
 }
 
-/*
-void handler(int s){
-    printf("entrou no HANDLER\n");
-    if(s == SIGUSR1){
-        for (int i = 0; i < nrpendingRequests; i++){
-            int idxTask = pendingRequestsIdx[i];
-            char* palavras[77];
-            
-            parse(tasks[idxTask], ' ', palavras);
-            int nrPals;
-            for (nrPals = 0; palavras[nrPals]!=NULL; nrPals++)
-                ;
 
-            if( goPendingOrNot(&(palavras[1]), nrPals-1) == ERROR){
-                removePending(i);
-                int fifo;
-                char* newFifoName = malloc(1024);
-                sprintf(newFifoName, "tmp/fifoRead%s",palavras[0]);//fifo especifico para enviar mensagens para processo especifico
-                if ((fifo = open("tmp/fifoRead",O_WRONLY,0622)) == -1){//em vez de usar sinais tornar o fifo único para o cliente
-                    perror("Erro a abrir FIFO");
-                    addPending(idxTask);
-                    //avisar clienete que ficheiro sofreu erro???
-                    continue;
-                }
-                pid_t child_pid;
-                int status;
-                if(!fork()){// para não deixar o processo que corre o servidor à espera fazer double fork 
-                    if ((child_pid=!fork())==0){
-                        showRunning(fifo);
-                        int idx = addRunning(idxTask);
-
-                        redirecionar(palavras[2], palavras[3]);
-                        aplicarTransformacoes(&(palavras[4]), nrPals-4);
-                        removeRunning(idx);
-                    }
-                    else{
-                        wait(&status);
-                        showConclued(fifo);
-                        close(fifo);//por causa de ter 2 abertos influencia?? o outro também 
-                        //kill(pidServidor, SIGUSR1);//=???
-                        //enviar sinal para acordar pendentes??
-                    }
-                }
-            }
-        }
-        return;
-    }
-    else if(s==SIGTERM){
-        //acabar de forma graciosa
-        
-        //1->esperar que todos os running acabem
-        //2->notificar os pending que foi abortado
-        while(nrpendingRequests>0){
-            int pid = atoi(strsep(&tasks[pendingRequestsIdx[0]], " "));
-            removePending(0);
-            kill(pid, SIGTERM);
-        }
-        
-        //3-> nao deixar que mais processos sejam aceites(fechar fifo chega??, ja que foi aberto 2 vezes)
-    }
-}
-*/
-
+//-------------------- HANDLERS --------------------
 void handlerGracioso(int num){
+    printf("[GRACIOSA]\n");
+    kill(alrm, SIGKILL);
+    close(backbone);
+
     for (int i = 0; i < nrpendingRequests; i++){
-        write(pendingRequestsIdx[i][1], SERVICE_ABORTED, strlen(SERVICE_ABORTED));
-        close(pendingRequestsIdx[i][1]);
+        int fifoU = pendingRequestsIdx[i][1];
+        write(fifoU, SERVICE_ABORTED, strlen(SERVICE_ABORTED));
+        close(fifoU);
     }
     
     while (nrrunningRequests>0 || nrwaitingProcess>0){
@@ -407,67 +344,77 @@ void handlerGracioso(int num){
         for (int i = 0; i < nrwaitingProcess; i++){
             int pid = waiting[i][0];
             if(waitpid(pid, &status, WNOHANG)!=0){
-                removeRunning(waiting[i][1]);
+                int idxTask = waiting[i][1];
+                removeRunning(idxTask);
+                removeWaiting(idxTask);
+                i--;
             }
         }
         //running mas ainda nao tinha criado o fork?? resolver??
     }
+}
+
+void handlerDependences(int num){
+    printf("[DEPENDENCIAS]\n");
+    //lidar Waitting
+    int status;
+    for (int i = 0; i < nrwaitingProcess; i++){
+        int pid = waiting[i][0];
+        if(waitpid(pid, &status, WNOHANG)!=0){
+            int idxTask = waiting[i][1];
+            removeRunning(idxTask);
+            removeWaiting(idxTask);
+            i--;
+        }
+    }
     
+    //lidar Pendentes
+    printf("\t\t\t\t\t<%d>", nrpendingRequests);
+    for (int i = 0; i < nrpendingRequests; i++){
+        int idxTask = pendingRequestsIdx[i][0];
+        if(goPendingOrNot(tasks[idxTask])==OK){
+            int fifoU = removePending(i);
+            // ATENCAO VER SE NAO MUDA NADA, RECOPIAR O CODIGO DA MAIN DE NOVO MAIS PARA A FRENTE daqui para baixo só !!! e resolver possiveis problemas com variaveis usadas
+
+            int pid1, pid2;
+            int idx = addRunning(idxTask);
+                
+            if((pid1=fork())==0){// para não deixar o processo que corre o servidor à espera fazer double fork 
+                int status2;
+                if ((pid2=fork())==0){
+                    showRunning(fifoU);
+
+                    redirecionar(tasks[idxTask]->args[2], tasks[idxTask]->args[3]);
+                    aplicarTransformacoes(tasks[idxTask]);
+                    _exit(OK);
+                }
+                else{
+                    waitpid(pid2, &status2, 0);//mal nunca recebe
+                    printf("pai: FEEEEIIIIITTTOOOOOO!!!\n");
+                    showConclued(fifoU);
+                    //kill(pidServidor, SIGUSR1);//=???
+                    //enviar sinal para acordar pendentes?? conformar se esta bem
+                }
+                _exit(OK);
+            }
+            //daqui para a frente está no processo principal
+            else{
+                int stat;
+                if(waitpid(pid1, &stat, WNOHANG)==0){
+                    addWaiting(pid1, idxTask);
+                }
+                else{
+                    removeRunning(idx);
+                }
+            }
+            close(fifoU);//como o filho do filho tem copia do descritor pode usa-la
+        }
+    }
 }
 
 void handlerAlarm(int num){
-    if(getpid() == pidServidor){
-        //lidar Waitting
-        int status;
-        for (int i = 0; i < nrwaitingProcess; i++){
-            int pid = waiting[i][0];
-            if(waitpid(pid, &status, WNOHANG)!=0){
-                removeRunning(waiting[i][1]);
-            }
-        }
-        
-        //lidar Pendentes
-        for (int i = 0; i < nrpendingRequests; i++){
-            int idxTask = pendingRequestsIdx[i][0];
-            if(goPendingOrNot(tasks[idxTask])==OK){
-                int fifoU = removePending(idxTask);
-                // ATENCAO VER SE NAO MUDA NADA, RECOPIAR O CODIGO DA MAIN DE NOVO MAIS PARA A FRENTE daqui para baixo só !!! e resolver possiveis problemas com variaveis usadas
-
-                int pid1, pid2, status1;
-                int idx = addRunning(idxTask);
-                
-                if((pid1=!fork())==0){// para não deixar o processo que corre o servidor à espera fazer double fork 
-                    int status2;
-                    if ((pid2=!fork())==0){
-                        showRunning(fifoU);// ir buscar isto, fechar no fim
-
-                        redirecionar(tasks[idxTask]->args[2], tasks[idxTask]->args[3]);
-                        aplicarTransformacoes(tasks[idxTask]);
-                        _exit(OK);
-                    }
-                    else{
-                        waitpid(pid2, &status2, 0);//mal nunca recebe
-                        printf("pai: FEEEEIIIIITTTOOOOOO!!!\n");
-                        showConclued(fifoU);
-                        //kill(pidServidor, SIGUSR1);//=???
-                        //enviar sinal para acordar pendentes?? conformar se esta bem
-                    }
-                    _exit(OK);
-                }
-                //daqui para a frente está no processo principal
-                else{
-                    if(waitpid(pid1, &status1, WNOHANG)==0)
-                        addWaiting(pid1, idxTask);
-                    else
-                        removeRunning(idx);
-                }
-                close(fifoU);
-            }
-        }
-    }
-    else{
-        alarm(ALARM_TIME);
-    }
+    printf("[ALARM]\n");
+    alarm(ALARM_TIME);
 }
 
 int main(int argc, char const *argv[]){
@@ -498,6 +445,10 @@ int main(int argc, char const *argv[]){
         perror("sigTerm error");
         return ERROR;
     }
+    if(signal(SIGUSR1, handlerDependences) == SIG_ERR){
+        perror("sigTerm error");
+        return ERROR;
+    }
     
 
     // -------------- inicializations -------------- 
@@ -516,19 +467,20 @@ int main(int argc, char const *argv[]){
         waiting[i][1] = -1;
     }
     
-    // -------------- handle a cliente -------------- 
     
-    int backbone, fifoW, fifoU, n;
-
+    // -------------- alarm subroutine -------------- 
     pidServidor = getpid();
-    if(!fork()){//criar subrotina de alarme para dizer ao servidor para constantemente verificar por coisas pendentes/waitings
+    if((alrm=fork())==0){//criar subrotina de alarme para dizer ao servidor para constantemente verificar por coisas pendentes/waitings
         alarm(ALARM_TIME);
         while (1){
             pause();//espera que o alarme acabe
-            kill(pidServidor, SIGALRM);//manda o servidor ver pendentes e waitings
+            kill(pidServidor, SIGUSR1);//manda o servidor ver pendentes e waitings
         }
+        _exit(OK);
     }
     
+    // -------------- handle a cliente -------------- 
+    int fifoW, fifoU, n;
     if((res = mkfifo(WRITE_NAME, 0622)) == ERROR){// rw-w--w--
         perror("error creating the fifo Write(client)");
         return ERROR;
@@ -537,7 +489,7 @@ int main(int argc, char const *argv[]){
     chmod(WRITE_NAME, 0622);
 
 
-    printf("[Debug]Ready to accept client requests\n");        
+    printf("[Debug]Ready to accept client requests. Mypid<%d>\n", pidServidor);        
     if ((fifoW = open(WRITE_NAME, O_RDONLY, 0622)) == ERROR){
         perror("Erro a abrir FIFO(write)");
         return ERROR;
@@ -555,37 +507,25 @@ int main(int argc, char const *argv[]){
 
         infoStruct = temporary;
 
-        if(infoStruct->elems==2){//recebe pedido de status (com pid antes)
-            if(!fork()){
-                //------Abertura de um fifo unico para o Cliente--------
-                char* newFifoName = malloc(1024);
-                sprintf(newFifoName, "%s%s",READ_NAME, infoStruct->args[0]);//fifo especifico para enviar mensagens para processo especifico
-                printf("--%s--\n", newFifoName);
+        //------Abertura de um fifo unico para o Cliente--------
+        char* newFifoName = malloc(1024);
+        sprintf(newFifoName, "%s%s",READ_NAME, infoStruct->args[0]);//fifo especifico para enviar mensagens para processo especifico
+        printf("--%s--\n", newFifoName);
 
-                if ((fifoU = open(newFifoName,O_WRONLY, 0644)) == ERROR){
-                    perror("Erro a abrir FIFO(read)");
-                    free(newFifoName);
-                    _exit(ERROR);
-                }
-                //----------------------------
+        if ((fifoU = open(newFifoName,O_WRONLY, 0644)) == ERROR){
+            perror("Erro a abrir FIFO(read)");
+            free(newFifoName);
+            continue;
+        }
+        //----------------------------
 
-                showSatus(fifoU);
-                close(fifoU);
-                free(newFifoName);
-                _exit(OK);
-            }
+        if(infoStruct->elems==2){//recebe pedido de status
+            showSatus(fifoU);
+            close(fifoU);
+            free(newFifoName);
+
+            kill(pidServidor, SIGUSR1);//manda o servidor ver pendentes e waitings
         }else{//pid proc-file file-in file-out transf1...
-            //------Abertura de um fifo unico para o Cliente--------
-            char* newFifoName = malloc(1024);
-            sprintf(newFifoName, "%s%s",READ_NAME, infoStruct->args[0]);//fifo especifico para enviar mensagens para processo especifico
-            printf("--opening: %s--\n", newFifoName);
-            if ((fifoU = open(newFifoName,O_WRONLY, 0644)) == ERROR){
-                perror("Erro a abrir FIFO(read)");
-                free(newFifoName);
-                continue;
-            }
-            //----------------------------
-
             int position = addTask(infoStruct);//rever !!!!!
             printf("--testing pendente--\n");
             if( goPendingOrNot(infoStruct) == ERROR ){//passar o pid à frente, fica pendente
@@ -597,9 +537,9 @@ int main(int argc, char const *argv[]){
                 int pid1, pid2, status1;
                 int idx = addRunning(position);
                 
-                if((pid1=!fork())==0){// para não deixar o processo que corre o servidor à espera fazer double fork 
+                if((pid1=fork())==0){// para não deixar o processo que corre o servidor à espera fazer double fork 
                     int status2;
-                    if ((pid2=!fork())==0){
+                    if ((pid2=fork())==0){
                         showRunning(fifoU);
 
                         redirecionar(infoStruct->args[2], infoStruct->args[3]);
@@ -624,11 +564,11 @@ int main(int argc, char const *argv[]){
                         removeRunning(idx);
                     }
                 }
+                close(fifoU);//como o filho do filho tem copia do descritor pode usa-la
             }
             kill(pidServidor, SIGALRM);
             // de cima ou isto: alarm(0);
-            close(fifoU);//como o filho do filho tem copia do descritor pode usa-la
-            if(newFifoName) free(newFifoName);
+            free(newFifoName);
             //dar free nos mallocs todos(palavras e afins)
         }
         printf("acabei 1 pedido\n\n\n");
@@ -647,5 +587,8 @@ int main(int argc, char const *argv[]){
 
     if(transformations_folder)
         free(transformations_folder);
+
+    //int trash;
+    //waitpid(alrm, &trash, 0);//capturar o que sai do ciclo do alarm
     return 0;
 }

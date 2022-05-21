@@ -36,7 +36,7 @@ typedef struct pedido{
 
 #define TRANS_NR 7
 
-#define ALARM_TIME 20 // ver se aumentar ou nao
+#define ALARM_TIME 10 // ver se aumentar ou nao
 
 #define SERVICE_PENDENT "Request status: PENDENT\n"
 #define SERVICE_RUNNING "Request status: RUNNING\n"

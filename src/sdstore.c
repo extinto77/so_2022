@@ -66,11 +66,9 @@ int main(int argc, char const *argv[]){
             int j;
             for (j = 0; j < strlen(tmp); j++){
                 req->args[i][j] = tmp[j];
-                //printf("[%c|%c]", req->args[i][j], tmp[j]);
             }
             free(tmp);
             req->args[i][j] = '\0';
-            printf("<%d//%s>", i, req->args[i]);
         }
         sprintf(req->args[0], "%d", pid);//ver se isto da assim
         
