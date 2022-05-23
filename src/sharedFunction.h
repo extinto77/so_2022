@@ -18,9 +18,9 @@
 
 typedef struct pedido{
     int elems;
+    int priority;
     char args[22][333];//max de 22 palavras de de 333 de lenght de cada palavra
 }*Pedido;
-
 
 
 #define ERROR -1
@@ -47,8 +47,8 @@ typedef struct pedido{
 
 #define TEST ""
 
-#define READ_NAME "tmp/fifoRead"
-#define WRITE_NAME "tmp/fifoWrite"
+#define READ_NAME "../tmp/fifoRead"
+#define WRITE_NAME "../tmp/fifoWrite"
 
 
 void parse(char* string, char delimiter, char**result);
@@ -57,7 +57,7 @@ char* concatStrings(char *s1, char *s2);
 
 int redirecionar(char *inputPath, char *outputPath);
 
-
+void copyStruct(Pedido src, Pedido dst);
 
 
 #endif

@@ -57,6 +57,8 @@ SDStore-transf/*compress
 SDStore-transf/*crypt
 SDStore-transf/nop
 
+test_files/*
+
 .vscode
 
 bin/*

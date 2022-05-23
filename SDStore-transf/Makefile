@@ -32,4 +32,4 @@ nop: nop.o
 nop.o: nop.c
 
 clean:
-	rm -f *compress *decompress encrypt decrypt nop *.o
+	rm -f *.o *compress *crypt nop

@@ -27,14 +27,7 @@ int verificarSintax(const char** transformacoes, int nTransf){//antes de enviar 
     return count;
 }
 
-void handler(int s){
-    if(s==SIGTERM){
-        write(STDOUT_FILENO, SERVICE_ABORTED, strlen(SERVICE_ABORTED));
-    }
-}
-
 int main(int argc, char const *argv[]){
-    //signal(SIGTERM, handler);
 
     setbuf(stdout, NULL);
     int fd, n, res;
@@ -44,7 +37,7 @@ int main(int argc, char const *argv[]){
         char* info = "./sdstore status\n./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2 ...\n";
         write(STDOUT_FILENO, info, strlen(info));
     }
-    else if((argc==2 && !strcmp(argv[1],"status")) || (argc>=5 && !strcmp(argv[1], "proc-file"))){// ./sdstore status
+    else if((argc==2 && !strcmp(argv[1],"status")) || (argc>=5 && !strcmp(argv[1], "proc-file") && atoi(argv[2])>0 && atoi(argv[2])<=5)){
         char* newFifoName = malloc(1024);
         sprintf(newFifoName, "%s%d", READ_NAME, pid);//fifo especifico para receber mensagens só neste precesso
         if((res = mkfifo(newFifoName, 0644)) == ERROR){// rw-r--r--
@@ -52,6 +45,7 @@ int main(int argc, char const *argv[]){
             free(newFifoName);
             return ERROR;
         }
+        chmod(newFifoName, 0644);
 
         if ((fd=open(WRITE_NAME, O_WRONLY))==ERROR){
             perror("error opening fifoWrite");
@@ -60,28 +54,37 @@ int main(int argc, char const *argv[]){
             return ERROR;
         }
         Pedido req = malloc(sizeof(struct pedido));
-        req->elems = argc;
-        for (int i = 1; i < argc; i++){
-            char* tmp = strdup(argv[i]);
-            int j;
-            for (j = 0; j < strlen(tmp); j++){
-                req->args[i][j] = tmp[j];
-            }
-            free(tmp);
-            req->args[i][j] = '\0';
+
+        sprintf(req->args[1], "%s", argv[1]);
+
+        if(argc==2){
+            req->elems = argc;
+            req->priority = -1;
         }
-        sprintf(req->args[0], "%d", pid);//ver se isto da assim
+        else{
+            req->elems = argc-1;
+            req->priority = atoi(argv[2]);
+
+            for (int i = 3; i < argc; i++){
+                sprintf(req->args[i-1], "%s", argv[i]);
+            }
+        }
+        
+        sprintf(req->args[0], "%d", pid);
+
+        for (int i = 0; i < req->elems; i++){
+            printf("--%d,%s--\n", i, req->args[i]);
+        }
+        
         
         printf("[Debug]PID->%d<-\n", pid);
-        //printf(">%p<", req);
         write(fd, req, sizeof(struct pedido));
 
         if ((fd=open(newFifoName, O_RDONLY))==ERROR){
             perror("error opening fifoRead(unico)");
             unlink(newFifoName);
             free(newFifoName);
-            free(req);// dar free recursivo
-            //dar free's, avisar avisar servidor??
+            free(req);
             return ERROR;
         }
         char* buffer = malloc(1024);
@@ -91,14 +94,15 @@ int main(int argc, char const *argv[]){
 
         close(fd);
         
-        if(n==ERROR){
-            perror("error reading from fifo");
-            return ERROR;
-        }
         unlink(newFifoName);
         free(newFifoName);
         free(req);
         free(buffer);
+        
+        if(n==ERROR){
+            perror("error reading from fifo");
+            return ERROR;
+        }
     }
     else{
         perror("error on the input arguments");
