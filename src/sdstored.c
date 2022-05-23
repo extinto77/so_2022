@@ -38,7 +38,7 @@ int alrm;
 int accStarvation;
 
 //nao usado no codigo, muleta para quando o programa nao funcionava bem e havia fifos que nao eram apagados
-void deleteFolderContent(char* dir){//apagar o conteudo de uma pasta, para nao estar sempre a fzaer isto na shell
+/*void deleteFolderContent(char* dir){//apagar o conteudo de uma pasta, para nao estar sempre a fzaer isto na shell
     DIR *theFolder = opendir(dir);
     struct dirent *next_file;
     char* filepath = malloc(1024);
@@ -50,7 +50,7 @@ void deleteFolderContent(char* dir){//apagar o conteudo de uma pasta, para nao e
     }
     free(filepath);
     closedir(theFolder);
-}
+}*/
 
 int readConfigFile(char *path){// só lê 1024... se for maior ardeu FALTA TESTAR
     int fd;
@@ -228,8 +228,6 @@ int removePending(int index){
 }
 
 void removeRunning(int index){
-    //consultar tasks para ver filtros e
-    // atualizar array using
     for (int j = 4; j < tasks[index]->elems; j++){
         char* filtro = tasks[index]->args[j];
         for (int i = 0; i < TRANS_NR; i++){
@@ -470,10 +468,6 @@ void handlerAlarm(int num){
 int main(int argc, char const *argv[]){
     setbuf(stdout, NULL);//tirar depois
 
-    /*if(signal(SIGUSR1, handler) == SIG_ERR){
-        perror("SIGUSR1 failed");
-    }*/
-
     // -------------- validating arguments and configuring server settings -------------- 
     if(argc!=3){
         perror("invalid arguments to run the server");
@@ -485,7 +479,7 @@ int main(int argc, char const *argv[]){
     }
     transformations_folder = strdup((char*)argv[2]);
 
-    deleteFolderContent("../tmp");//apagar depois
+    //deleteFolderContent("../tmp");//apagar depois
 
     if(signal(SIGALRM, handlerAlarm) == SIG_ERR){
         perror("sigAlarm error");
