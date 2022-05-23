@@ -257,10 +257,12 @@ void showSatus(int fifo){
     write(fifo, buf, strlen(buf));
     for(int i=0;i<nrrunningRequests;i++){
         int idx = runningRequestsIdx[i];
-        char *full= malloc(1024);
-        strcpy(full, "");
+        char* full = "";//verificar
         for (int i = 0; i < tasks[idx]->elems; i++){
-            full = concatStrings(full, concatStrings(tasks[idx]->args[i], " "));
+            char* tmp = concatStrings(tasks[idx]->args[i], " ");
+            full = concatStrings(full, tmp);
+            if(tmp)
+                free(tmp);
             if(i==1){
                 char* pri=malloc(77);
                 sprintf(pri, "%d ", tasks[idx]->priority);//rever isto
@@ -284,7 +286,10 @@ void showSatus(int fifo){
         char *full= malloc(1024);
         strcpy(full, "");
         for (int i = 0; i < tasks[idx]->elems; i++){
-            full = concatStrings(full, concatStrings(tasks[idx]->args[i], " "));
+            char* tmp = concatStrings(tasks[idx]->args[i], " ");
+            full = concatStrings(full, tmp);
+            if(tmp)
+                free(tmp);
             if(i==1){
                 char* pri=malloc(77);
                 sprintf(pri, "%d ", tasks[idx]->priority);//rever isto
@@ -558,8 +563,10 @@ int main(int argc, char const *argv[]){
 
         if ((fifoU = open(newFifoName,O_WRONLY, 0644)) == ERROR){
             perror("Erro a abrir FIFO(read)");
-            printf("<%s>", newFifoName);
-            free(newFifoName);
+            if(newFifoName)
+                free(newFifoName);
+            if(infoStruct)
+                free(infoStruct);
             continue;
         }
         //----------------------------

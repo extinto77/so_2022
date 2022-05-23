@@ -5,11 +5,9 @@ void parse(char* string, char delimiter, char**result){//falta testar
     int idx=0;
     for (int i = 0; i < strlen(string);idx++){
         int j;
-        //result[idx] = malloc(1024);
         for (j = 0; i+j<strlen(string) && string[i+j]!=delimiter; j++){
             result[idx][j] = string[i+j];
         }
-        printf("-->%d<--", j);
         result[idx][j++] = '\0';
         i+=j;
     }
@@ -29,7 +27,6 @@ int redirecionar(char *inputPath, char *outputPath){
     input = open(inputPath, O_RDONLY);
     if(input == ERROR){
         perror("error redirecting input");
-        printf("--%s--\n", inputPath);
         return ERROR;
     }
     dup2(input,STDIN_FILENO);

@@ -68,14 +68,8 @@ int main(int argc, char const *argv[]){
                 sprintf(req->args[i-1], "%s", argv[i]);
             }
         }
-        
         sprintf(req->args[0], "%d", pid);
-
-        for (int i = 0; i < req->elems; i++){
-            printf("--%d,%s--\n", i, req->args[i]);
-        }
-        
-        
+     
         printf("[Debug]PID->%d<-\n", pid);
         write(fd, req, sizeof(struct pedido));
 
