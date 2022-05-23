@@ -35,6 +35,8 @@ pid_t pidServidor;
 int backbone;
 int alrm;
 
+int accStarvation;
+
 //nao usado no codigo, muleta para quando o programa nao funcionava bem e havia fifos que nao eram apagados
 void deleteFolderContent(char* dir){//apagar o conteudo de uma pasta, para nao estar sempre a fzaer isto na shell
     DIR *theFolder = opendir(dir);
@@ -261,11 +263,18 @@ void showSatus(int fifo){
         strcpy(full, "");
         for (int i = 0; i < tasks[idx]->elems; i++){
             full = concatStrings(full, concatStrings(tasks[idx]->args[i], " "));
+            if(i==1){
+                char* pri=malloc(77);
+                sprintf(pri, "%d ", tasks[idx]->priority);//rever isto
+                full = concatStrings(full, pri);
+                if(pri)
+                    free(pri);
+            }
         }
         sprintf(buf,"task #%d: (pid)%s\n", idx, full);//imprime as que estao a correr no momento
         if(full)
             free(full);
-        //rever acima a ultima string
+
         write(fifo, buf, strlen(buf));
     }
 
@@ -278,12 +287,19 @@ void showSatus(int fifo){
         strcpy(full, "");
         for (int i = 0; i < tasks[idx]->elems; i++){
             full = concatStrings(full, concatStrings(tasks[idx]->args[i], " "));
+            if(i==1){
+                char* pri=malloc(77);
+                sprintf(pri, "%d ", tasks[idx]->priority);//rever isto
+                full = concatStrings(full, pri);
+                if(pri)
+                    free(pri);
+            }
         }
 
         sprintf(buf,"pending #%d: (pid)%s\n", idx, full);//imprime as que estao a correr no momento
         if(full)
             free(full);
-        //rever acima a ultima string
+
         write(fifo, buf, strlen(buf));
     }
 
@@ -307,8 +323,13 @@ void showRunning(int fifo){
     write(fifo, SERVICE_RUNNING, strlen(SERVICE_RUNNING));
 }
 
-void showConclued(int fifo){
-    write(fifo, SERVICE_FINISHED, strlen(SERVICE_FINISHED));//+1??
+void showConclued(int fifo, off_t sizeBegin, off_t sizeEnd){
+    write(fifo, SERVICE_FINISHED, strlen(SERVICE_FINISHED));
+    char *tmp = malloc(1024);
+    sprintf(tmp, "(bytes-input: %ld, bytes-output: %ld)\n", sizeBegin, sizeEnd);
+    write(fifo, tmp, strlen(tmp));
+    if(tmp)
+        free(tmp);
 }
 
 int goPendingOrNot(Pedido req){
@@ -334,6 +355,13 @@ int goPendingOrNot(Pedido req){
     return OK;
 }
 
+void increasePriorities(){//evitar Starvation, a cada 7 SIGSUR1 aumenta as prioridades de todos abaixo de 5
+    for (int i = 0; i < nrpendingRequests; i++){
+        if(tasks[pendingRequestsIdx[i][0]]->priority == 5)
+            break;
+        tasks[pendingRequestsIdx[i][0]]->priority += 1;
+    }
+}
 
 //-------------------- HANDLERS --------------------
 void handlerGracioso(int num){
@@ -367,6 +395,12 @@ void handlerGracioso(int num){
 }
 
 void handlerDependences(int num){
+    accStarvation++;
+    if(accStarvation==STARVATION_COUNT){
+        increasePriorities();
+        accStarvation=0;
+    }
+
     printf("[DEPENDENCIAS]\n");
     //lidar Waitting
     int status;
@@ -402,7 +436,9 @@ void handlerDependences(int num){
                 else{
                     waitpid(pid2, &status2, 0);
                     printf("pai: pedido acabado!!!\n");
-                    showConclued(fifoU);
+                    off_t sizeBegin = calculaTamanho(tasks[idxTask]->args[2]);
+                    off_t sizeEnd = calculaTamanho(tasks[idxTask]->args[3]);
+                    showConclued(fifoU, sizeBegin, sizeEnd);
 
                     kill(pidServidor, SIGUSR1);//manda o servidor ver pendentes e waitings
 
@@ -428,6 +464,8 @@ void handlerAlarm(int num){
     //printf("[ALARM]\n");
     alarm(ALARM_TIME);
 }
+
+
 
 int main(int argc, char const *argv[]){
     setbuf(stdout, NULL);//tirar depois
@@ -468,6 +506,7 @@ int main(int argc, char const *argv[]){
     nrrunningRequests=0;
     tasksNr=0;
     nrwaitingProcess=0;
+    accStarvation = 0;
     for (int i = 0; i < 7; i++){
         using[i]=0;
     }
@@ -501,9 +540,6 @@ int main(int argc, char const *argv[]){
         perror("error creating the fifo Write(client)");
         return ERROR;
     }
-    //as permissoes podem mudar, para prevenir vamos acertar as permissoes
-    chmod(WRITE_NAME, 0622);
-
 
     printf("[Debug]Ready to accept client requests. Mypid<%d>\n", pidServidor);        
     if ((fifoW = open(WRITE_NAME, O_RDONLY, 0622)) == ERROR){
@@ -520,6 +556,7 @@ int main(int argc, char const *argv[]){
 
     while((n = read(fifoW,temporary,sizeof(struct pedido))) > 0){//ler do cliente
         Pedido infoStruct = malloc(sizeof(struct pedido));
+        copyStruct(temporary, infoStruct);
 
         //------Abertura de um fifo unico para o Cliente--------
         char* newFifoName = malloc(1024);
@@ -527,6 +564,7 @@ int main(int argc, char const *argv[]){
 
         if ((fifoU = open(newFifoName,O_WRONLY, 0644)) == ERROR){
             perror("Erro a abrir FIFO(read)");
+            printf("<%s>", newFifoName);
             free(newFifoName);
             continue;
         }
@@ -561,7 +599,9 @@ int main(int argc, char const *argv[]){
                     else{
                         waitpid(pid2, &status2, 0);
                         printf("pai: pedido acabado!!!\n");
-                        showConclued(fifoU);
+                        off_t sizeBegin = calculaTamanho(infoStruct->args[2]);
+                        off_t sizeEnd = calculaTamanho(infoStruct->args[3]);
+                        showConclued(fifoU, sizeBegin, sizeEnd);
 
                         kill(pidServidor, SIGUSR1);//manda o servidor ver pendentes e waitings
                     }

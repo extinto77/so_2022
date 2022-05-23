@@ -36,11 +36,13 @@ typedef struct pedido{
 
 #define TRANS_NR 7
 
-#define ALARM_TIME 10 // ver se aumentar ou nao
+#define ALARM_TIME 10
+
+#define STARVATION_COUNT 7
 
 #define SERVICE_PENDENT "Request status: PENDENT\n"
 #define SERVICE_RUNNING "Request status: RUNNING\n"
-#define SERVICE_FINISHED "Request status: FINISHED\n"
+#define SERVICE_FINISHED "Request status: CONCLUDED\n"
 #define SERVICE_ABORTED "Request status: ABORTED\n"
 
 #define PIPE_FILE_CREATED "Podes criar o fifo unico"
@@ -59,5 +61,6 @@ int redirecionar(char *inputPath, char *outputPath);
 
 void copyStruct(Pedido src, Pedido dst);
 
+off_t calculaTamanho(char* path);
 
 #endif

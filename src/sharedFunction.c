@@ -53,3 +53,10 @@ void copyStruct(Pedido src, Pedido dst){
         sprintf(dst->args[i], "%s", src->args[i]);
     }
 }
+
+off_t calculaTamanho(char* path){
+    int fd = open(path, O_RDONLY);
+    off_t size = lseek(fd, 0, SEEK_END);
+    close(fd);
+    return size;
+}
