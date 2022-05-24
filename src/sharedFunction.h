@@ -26,34 +26,21 @@ typedef struct pedido{
 #define ERROR -1
 #define OK 1
 
-#define NOP 0
-#define BCOMPRESS 1
-#define BDECOMPRESS 2
-#define GCOMPRESS 3
-#define GDECOMPRESS 4
-#define ENCRYPT 5
-#define DECRYPT 6
+#define MAX_STORE 777
 
 #define TRANS_NR 7
 
-#define ALARM_TIME 10
+#define ALARM_TIME 11
 
-#define STARVATION_COUNT 7
+#define STARVATION_COUNT 11
 
 #define SERVICE_PENDENT "Request status: PENDENT\n"
 #define SERVICE_RUNNING "Request status: RUNNING\n"
 #define SERVICE_FINISHED "Request status: CONCLUDED\n"
 #define SERVICE_ABORTED "Request status: ABORTED\n"
 
-#define PIPE_FILE_CREATED "Podes criar o fifo unico"
-
-#define TEST ""
-
 #define READ_NAME "../tmp/fifoRead"
 #define WRITE_NAME "../tmp/fifoWrite"
-
-
-void parse(char* string, char delimiter, char**result);
 
 char* concatStrings(char *s1, char *s2);
 

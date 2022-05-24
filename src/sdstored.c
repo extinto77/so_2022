@@ -28,7 +28,7 @@ int nrrunningRequests;//numero de pedidos a correr
 int waiting[100][2];// pid | idxTask
 int nrwaitingProcess;
 
-Pedido tasks[777];//todos os pedidos enviados para o servidor
+Pedido tasks[MAX_STORE];//todos os pedidos enviados para o servidor
 int tasksNr;
 
 pid_t pidServidor;
@@ -154,6 +154,9 @@ int aplicarTransformacoes(Pedido req){//assumindo que o redirecionamento já est
     return OK;
 }
 
+
+
+//-------------------- ADICIONAR/REMOVER DE FILAS --------------------
 int addPending(int idxTask, int fifoU, int priori){//adiciona no sitio correto da fila o idxTask e o fifoU da tarefa que fica pendente
     int i;
     for (i = 0; i < nrpendingRequests; i++){
@@ -249,9 +252,11 @@ void removeRunning(int index){
     }
     runningRequestsIdx[nrrunningRequests]=-1;
 }
+//------------------------------------------------------------
 
+
+//-------------------- INFORMATION SENDERS --------------------
 void showSatus(int fifo){
-
     char* buf = malloc(1024);
     strcpy(buf, "---RUNING REQUESTS---\n");
     write(fifo, buf, strlen(buf));
@@ -334,6 +339,9 @@ void showConclued(int fifo, off_t sizeBegin, off_t sizeEnd){
     if(tmp)
         free(tmp);
 }
+//------------------------------------------------------------
+
+
 
 int goPendingOrNot(Pedido req){
     int after[TRANS_NR];
@@ -365,6 +373,8 @@ void increasePriorities(){//evitar Starvation, a cada 7 SIGSUR1 aumenta as prior
         tasks[pendingRequestsIdx[i][0]]->priority += 1;
     }
 }
+
+
 
 //-------------------- HANDLERS --------------------
 void handlerGracioso(int num){
@@ -467,7 +477,7 @@ void handlerAlarm(int num){
     //printf("[ALARM]\n");
     alarm(ALARM_TIME);
 }
-
+//------------------------------------------------------------
 
 
 int main(int argc, char const *argv[]){
@@ -516,7 +526,7 @@ int main(int argc, char const *argv[]){
         waiting[i][0] = -1;
         waiting[i][1] = -1;
     }
-    for (int i = 0; i < 777; i++){
+    for (int i = 0; i < MAX_STORE; i++){
         tasks[i]=NULL;
     }
     
@@ -632,6 +642,7 @@ int main(int argc, char const *argv[]){
     close(fifoW);
     unlink(WRITE_NAME);//unlink nao apaga, logo. só quando todos fecham o fd.
     
+    
     if(temporary)
         free(temporary);
     for (int i = 0; i < tasksNr; i++){
@@ -639,9 +650,6 @@ int main(int argc, char const *argv[]){
             free(tasks[i]);
     }
     
-
-    // na graciosa ir a todas as tasks e dar free em todas as structs, recursivamente tb
-
     if(transformations_folder)
         free(transformations_folder);
 

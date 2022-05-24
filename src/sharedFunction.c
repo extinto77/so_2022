@@ -1,19 +1,6 @@
 #include "sharedFunction.h"
 
 
-void parse(char* string, char delimiter, char**result){//falta testar
-    int idx=0;
-    for (int i = 0; i < strlen(string);idx++){
-        int j;
-        for (j = 0; i+j<strlen(string) && string[i+j]!=delimiter; j++){
-            result[idx][j] = string[i+j];
-        }
-        result[idx][j++] = '\0';
-        i+=j;
-    }
-    result[idx]=NULL;
-}
-
 char* concatStrings(char *s1, char *s2){
     char *result = malloc(strlen(s1) + strlen(s2) + 1);
     strcpy(result, s1);
@@ -32,7 +19,7 @@ int redirecionar(char *inputPath, char *outputPath){
     dup2(input,STDIN_FILENO);
     close(input);
   
-    output = open(outputPath, O_TRUNC | O_WRONLY | O_CREAT, 0666); //0644
+    output = open(outputPath, O_TRUNC | O_WRONLY | O_CREAT, 0666);
     if( output == ERROR){
         perror("error redirecting output");
         return ERROR;
