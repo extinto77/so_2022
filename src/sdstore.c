@@ -37,7 +37,7 @@ int main(int argc, char const *argv[]){
         char* info = "./sdstore status\n./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2 ...\n";
         write(STDOUT_FILENO, info, strlen(info));
     }
-    else if((argc==2 && !strcmp(argv[1],"status")) || (argc>=5 && !strcmp(argv[1], "proc-file") && atoi(argv[2])>=0 && atoi(argv[2])<=5)){
+    else if((argc==2 && !strcmp(argv[1],"status")) || (argc>=6 && !strcmp(argv[1], "proc-file") && atoi(argv[2])>=0 && atoi(argv[2])<=5)){
         char* newFifoName = malloc(1024);
         sprintf(newFifoName, "%s%d", READ_NAME, pid);//fifo especifico para receber mensagens só neste precesso
         if((res = mkfifo(newFifoName, 0644)) == ERROR){// rw-r--r--
