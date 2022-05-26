@@ -70,8 +70,13 @@ int main(int argc, char const *argv[]){
         }
         sprintf(req->args[0], "%d", pid);
      
-        printf("[Debug]PID->%d<-\n", pid);
+        char *debug1 = malloc(77);
+        sprintf(debug1, "[Debug]PID->%d<-\n", pid);
+        write(1, debug1, strlen(debug1));
+        free(debug1);
+
         write(fd, req, sizeof(struct pedido));
+        close(fd);//ver se deixa de dar por causa disto
 
         if ((fd=open(newFifoName, O_RDONLY))==ERROR){
             perror("error opening fifoRead(unico)");

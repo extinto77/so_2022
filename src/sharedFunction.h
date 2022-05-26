@@ -19,7 +19,7 @@
 typedef struct pedido{
     int elems;
     int priority;
-    char args[22][333];//max de 22 palavras de de 333 de lenght de cada palavra
+    char args[22][222];//max de 22 palavras de de 222 de lenght de cada palavra
 }*Pedido;
 
 
