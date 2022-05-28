@@ -526,6 +526,7 @@ int main(int argc, char const *argv[]){
         return ERROR;
     }
 
+    pidServidor = getpid();
     char* tmp = malloc(1024);
     sprintf(tmp, "[Debug]Ready to accept client requests. Mypid<%d>\n", pidServidor);
     write(1, tmp, strlen(tmp));
@@ -547,7 +548,6 @@ int main(int argc, char const *argv[]){
 
 
     // -------------- alarm subroutine -------------- 
-    pidServidor = getpid();
     if((alrm=fork())==0){//criar subrotina de alarme para dizer ao servidor para constantemente verificar por coisas pendentes/waitings
         alarm(ALARM_TIME);
         while (1){
