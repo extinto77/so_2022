@@ -398,8 +398,8 @@ void handlerDependences(int num){
         accStarvation=0;
     }
 
-    char* tmp = "[DEPENDENCIAS]\n";
-    write(1, tmp, strlen(tmp));
+    char* tmp1 = "[DEPENDENCIAS]\n";
+    write(1, tmp1, strlen(tmp1));
     
     //lidar Waitting
     int status;
@@ -434,7 +434,8 @@ void handlerDependences(int num){
                 }
                 else{
                     waitpid(pid2, &status2, 0);
-                    printf("pai: pedido acabado!!!\n");
+                    char *tmp2 = "pai: pedido acabado!!!\n";
+                    write(1, tmp2, strlen(tmp2));
                     off_t sizeBegin = calculaTamanho(tasks[idxTask]->args[2]);
                     off_t sizeEnd = calculaTamanho(tasks[idxTask]->args[3]);
                     showConclued(fifoU, sizeBegin, sizeEnd);
@@ -603,7 +604,8 @@ int main(int argc, char const *argv[]){
                     }
                     else{
                         waitpid(pid2, &status2, 0);
-                        printf("pai: pedido acabado!!!\n");
+                        char *tmp2 = "pai: pedido acabado!!!\n";
+                        write(1, tmp2, strlen(tmp2));
                         off_t sizeBegin = calculaTamanho(infoStruct->args[2]);
                         off_t sizeEnd = calculaTamanho(infoStruct->args[3]);
                         showConclued(fifoU, sizeBegin, sizeEnd);
