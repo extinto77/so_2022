@@ -37,22 +37,7 @@ int alrm;
 
 int accStarvation;
 
-//nao usado no codigo, muleta para quando o programa nao funcionava bem e havia fifos que nao eram apagados
-/*void deleteFolderContent(char* dir){//apagar o conteudo de uma pasta, para nao estar sempre a fzaer isto na shell
-    DIR *theFolder = opendir(dir);
-    struct dirent *next_file;
-    char* filepath = malloc(1024);
-
-    while ( (next_file = readdir(theFolder)) != NULL ){
-        sprintf(filepath, "%s/%s", dir, next_file->d_name);
-        unlink(filepath);
-        //remove(filepath);
-    }
-    free(filepath);
-    closedir(theFolder);
-}*/
-
-int readConfigFile(char *path){// só lê 1024... se for maior ardeu FALTA TESTAR
+int readConfigFile(char *path){
     int fd;
     if((fd = open(path,O_RDONLY)) == ERROR){
         perror("error opening config file");
@@ -141,7 +126,7 @@ int aplicarTransformacoes(Pedido req){//assumindo que o redirecionamento já est
             if(close(p[1])){
                 perror("closing fd (aplicar transformacoes)");
             } 
-            free(tmp);//para nao dar erro no exec so dar free se ja nao estiver em uso
+            free(tmp);
         }
     }
     char* tmp = strdup(req->args[i]);
@@ -270,7 +255,7 @@ void showSatus(int fifo){
                 free(tmp);
             if(i==1){
                 char* pri=malloc(77);
-                sprintf(pri, "%d ", tasks[idx]->priority);//rever isto
+                sprintf(pri, "%d ", tasks[idx]->priority);//rever isto !!!!!!!!!!!
                 full = concatStrings(full, pri);
                 if(pri)
                     free(pri);
@@ -297,7 +282,7 @@ void showSatus(int fifo){
                 free(tmp);
             if(i==1){
                 char* pri=malloc(77);
-                sprintf(pri, "%d ", tasks[idx]->priority);//rever isto
+                sprintf(pri, "%d ", tasks[idx]->priority);//rever isto !!!!!!!!!!!
                 full = concatStrings(full, pri);
                 if(pri)
                     free(pri);
@@ -314,9 +299,7 @@ void showSatus(int fifo){
     strcpy(buf, "\n---SERVER CONFIGURATIONS---\n");
     write(fifo, buf, strlen(buf));
     for(int i=0;i<TRANS_NR;i++){
-        char* trans = "transf ";
-        write(fifo, trans, strlen(trans));
-        sprintf(buf,"%s: %d/%d (running/max)\n", transformacoesNome[i], using[i], config[i]);//estado de ocupacao de cada uma das transformacoes
+        sprintf(buf,"transf %s: %d/%d (running/max)\n", transformacoesNome[i], using[i], config[i]);//estado de ocupacao de cada uma das transformacoes
         write(fifo, buf, strlen(buf));
     }
     if(buf)
@@ -366,7 +349,7 @@ int goPendingOrNot(Pedido req){
     return OK;
 }
 
-void increasePriorities(){//evitar Starvation, a cada 7 SIGSUR1 aumenta as prioridades de todos abaixo de 5
+void increasePriorities(){//evitar Starvation, a cada 11 SIGSUR1 aumenta as prioridades de todos abaixo de 5
     for (int i = 0; i < nrpendingRequests; i++){
         if(tasks[pendingRequestsIdx[i][0]]->priority == 5)
             break;
@@ -378,10 +361,12 @@ void increasePriorities(){//evitar Starvation, a cada 7 SIGSUR1 aumenta as prior
 
 //-------------------- HANDLERS --------------------
 void handlerGracioso(int num){
-    if(getpid()!=pidServidor)// caso se de só kill no processo do fork que tem o alarme
+    if(getpid()!=pidServidor)// caso se de só kill no processo do fork que tem o alarme, acho quwe é par aapagar !!!!!
         exit(OK);
 
-    printf("[GRACIOSA]\n");
+    char* tmp = "[GRACIOSA]\n";
+    write(1, tmp, strlen(tmp));
+
     kill(alrm, SIGKILL);
     close(backbone);
 
@@ -403,7 +388,6 @@ void handlerGracioso(int num){
                 i--;
             }
         }
-        //running mas ainda nao tinha criado o fork?? resolver??
     }
 }
 
@@ -414,7 +398,9 @@ void handlerDependences(int num){
         accStarvation=0;
     }
 
-    printf("[DEPENDENCIAS]\n");
+    char* tmp = "[DEPENDENCIAS]\n";
+    write(1, tmp, strlen(tmp));
+    
     //lidar Waitting
     int status;
     for (int i = 0; i < nrwaitingProcess; i++){
@@ -474,27 +460,21 @@ void handlerDependences(int num){
 }
 
 void handlerAlarm(int num){
-    //printf("[ALARM]\n");
+    //char* tmp = "[ALARM]\n";
+    //write(1, tmp, strlen(tmp));
     alarm(ALARM_TIME);
 }
 //------------------------------------------------------------
 
 
 int main(int argc, char const *argv[]){
-    setbuf(stdout, NULL);//tirar depois
+    setbuf(stdout, NULL);
 
     // -------------- validating arguments and configuring server settings -------------- 
     if(argc!=3){
         perror("invalid arguments to run the server");
         return ERROR;
     }
-    int res;
-    if((res = readConfigFile((char*)argv[1])) == ERROR){
-        return ERROR;
-    }
-    transformations_folder = strdup((char*)argv[2]);
-
-    //deleteFolderContent("../tmp");//apagar depois
 
     if(signal(SIGALRM, handlerAlarm) == SIG_ERR){
         perror("sigAlarm error");
@@ -508,6 +488,11 @@ int main(int argc, char const *argv[]){
         perror("sigTerm error");
         return ERROR;
     }
+    int res;
+    if((res = readConfigFile((char*)argv[1])) == ERROR){
+        return ERROR;
+    }
+    transformations_folder = strdup((char*)argv[2]);
     
 
     // -------------- inicializations -------------- 
@@ -531,7 +516,35 @@ int main(int argc, char const *argv[]){
     }
     
     
+    // -------------- handle fifos -------------- 
+    int fifoW, fifoU, n;
+    if((res = mkfifo(WRITE_NAME, 0622)) == ERROR){// rw-w--w--
+        perror("error creating the fifo Write(client)");
+        if(transformations_folder)
+            free(transformations_folder);
+        return ERROR;
+    }
+
+    char* tmp = malloc(1024);
+    sprintf(tmp, "[Debug]Ready to accept client requests. Mypid<%d>\n", pidServidor);
+    write(1, tmp, strlen(tmp));
+    if ((fifoW = open(WRITE_NAME, O_RDONLY, 0622)) == ERROR){
+        perror("Erro a abrir FIFO(write)");
+        if(transformations_folder)
+            free(transformations_folder);
+        return ERROR;
+    }
+    // na graciosa fechar este e acaba o while
+    if ((backbone = open(WRITE_NAME, O_WRONLY)) == ERROR){//backbone, nunca vai receber EOF na leitura
+        perror("Erro a abrir FIFO(write)");
+        if(transformations_folder)
+            free(transformations_folder);
+        return ERROR;
+    }
+    // ------------------------------------------ 
     
+
+
     // -------------- alarm subroutine -------------- 
     pidServidor = getpid();
     if((alrm=fork())==0){//criar subrotina de alarme para dizer ao servidor para constantemente verificar por coisas pendentes/waitings
@@ -540,29 +553,12 @@ int main(int argc, char const *argv[]){
             pause();//espera que o alarme acabe
             kill(pidServidor, SIGUSR1);//manda o servidor ver pendentes e waitings
         }
-        _exit(OK);
+        _exit(OK);//nunca chega a isto??
     }
-    
-    // -------------- handle a cliente -------------- 
-    int fifoW, fifoU, n;
-    if((res = mkfifo(WRITE_NAME, 0622)) == ERROR){// rw-w--w--
-        perror("error creating the fifo Write(client)");
-        return ERROR;
-    }
+    // ------------------------------------------ 
 
-    printf("[Debug]Ready to accept client requests. Mypid<%d>\n", pidServidor);        
-    if ((fifoW = open(WRITE_NAME, O_RDONLY, 0622)) == ERROR){
-        perror("Erro a abrir FIFO(write)");
-        return ERROR;
-    }
+
     Pedido temporary = malloc(sizeof(struct pedido));
-    
-    // na graciosa fechar este e acaba o while
-    if ((backbone = open(WRITE_NAME, O_WRONLY)) == ERROR){//backbone, nunca vai receber EOF na leitura
-        perror("Erro a abrir FIFO(write)");
-        return ERROR;
-    }
-
     while((n = read(fifoW,temporary,sizeof(struct pedido))) > 0){//ler do cliente
         Pedido infoStruct = malloc(sizeof(struct pedido));
         copyStruct(temporary, infoStruct);
@@ -589,12 +585,10 @@ int main(int argc, char const *argv[]){
             free(newFifoName);
         }else{
             int position = addTask(infoStruct);
-            if( goPendingOrNot(infoStruct) == ERROR ){//passar o pid à frente, fica pendente
-                //printf("#%d->pendente\n", position);
+            if( goPendingOrNot(infoStruct) == ERROR ){
                 addPending(position, fifoU, infoStruct->priority);//esperar ate que o sinal SIGSUR1 faca a sua parte 
                 showPendent(fifoU);
             }else{
-                //printf("#%d->nao pendente\n", position);
                 addRunning(position);
                 int pid1, pid2;
                 
@@ -615,8 +609,8 @@ int main(int argc, char const *argv[]){
                         showConclued(fifoU, sizeBegin, sizeEnd);
 
                         kill(pidServidor, SIGUSR1);//manda o servidor ver pendentes e waitings
+                        _exit(OK);
                     }
-                    _exit(OK);
                 }
                 //daqui para a frente está no processo principal
                 else{
