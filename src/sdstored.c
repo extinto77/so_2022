@@ -361,8 +361,10 @@ void increasePriorities(){//evitar Starvation, a cada 11 SIGSUR1 aumenta as prio
 
 //-------------------- HANDLERS --------------------
 void handlerGracioso(int num){
-    if(getpid()!=pidServidor)// caso se de só kill no processo do fork que tem o alarme, acho quwe é par aapagar !!!!!
+    if(getpid()==alrm)// caso se de só kill no processo do fork que tem o alarme, acho quwe é par aapagar !!!!!
         exit(OK);
+    if(getpid()!=pidServidor)// caso se de só kill no processo do fork que tem o alarme, acho quwe é par aapagar !!!!!
+        return;
 
     char* tmp = "[GRACIOSA]\n";
     write(1, tmp, strlen(tmp));
@@ -392,6 +394,9 @@ void handlerGracioso(int num){
 }
 
 void handlerDependences(int num){
+    if(getpid()!=pidServidor)// de só kill no processo do fork que tem o alarme, acho quwe é par aapagar !!!!!
+        return;
+
     accStarvation++;
     if(accStarvation==STARVATION_COUNT){
         increasePriorities();
@@ -461,6 +466,8 @@ void handlerDependences(int num){
 }
 
 void handlerAlarm(int num){
+    if(getpid()==alrm)//aapagar !!!!!
+        return;
     //char* tmp = "[ALARM]\n";
     //write(1, tmp, strlen(tmp));
     alarm(ALARM_TIME);
