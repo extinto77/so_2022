@@ -145,7 +145,7 @@ int aplicarTransformacoes(Pedido req){//assumindo que o redirecionamento já est
 int addPending(int idxTask, int fifoU, int priori){//adiciona no sitio correto da fila o idxTask e o fifoU da tarefa que fica pendente
     int i;
     for (i = 0; i < nrpendingRequests; i++){
-        if(priori>=tasks[pendingRequestsIdx[i][0]]->priority)
+        if(priori<tasks[pendingRequestsIdx[i][0]]->priority)
             break;
     }
     for (int j = nrpendingRequests; j > i; j--){
