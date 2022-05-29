@@ -622,7 +622,7 @@ int main(int argc, char const *argv[]){
                     }
                 }
                 close(fifoU);//como o filho do filho tem copia do descritor pode usa-la
-                kill(pidServidor, SIGALRM);
+                kill(pidServidor, SIGUSR1);
             }
             if(newFifoName)
                 free(newFifoName);
@@ -631,7 +631,6 @@ int main(int argc, char const *argv[]){
     if(n==ERROR){
         perror("error reading from fifoW");
     }
-    close(backbone);
     close(fifoW);
     unlink(WRITE_NAME);//unlink nao apaga, logo. só quando todos fecham o fd.
     
