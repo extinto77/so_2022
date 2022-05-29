@@ -369,7 +369,7 @@ void handlerGracioso(int num){
     char* tmp = "[GRACIOSA]\n";
     write(1, tmp, strlen(tmp));
 
-    kill(alrm, SIGKILL);
+    kill(alrm, SIGKILL);//nao sei se chega aqui ou se o exit fecha logo o processo
     close(backbone);
 
     while (nrpendingRequests>0){
